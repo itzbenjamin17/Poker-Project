@@ -16,7 +16,7 @@ public class Player {
     private final String name;
     private List<Card> holeCards;
     private List<Card> bestHand;
-    private int valueOfHand;
+    private HandRank handRank;
     private int chips;
     private int currentBet;
     private boolean hasFolded;
@@ -35,7 +35,7 @@ public class Player {
         this.holeCards = new ArrayList<>();
         this.bestHand = new ArrayList<>();
         this.currentBet = 0;
-        this.valueOfHand = -1;
+        this.handRank = HandRank.NO_HAND;
         this.hasFolded = false;
         this.isAllIn = false;
         this.isOut = false;
@@ -48,7 +48,7 @@ public class Player {
     public void resetAttributes() {
         this.holeCards = new ArrayList<>();
         this.bestHand = new ArrayList<>();
-        this.valueOfHand = -1;
+        this.handRank = HandRank.NO_HAND;
         this.hasFolded = false;
         this.isAllIn = false;
         this.isOut = false;
@@ -183,9 +183,12 @@ public class Player {
     public List<Card> getBestHand() {return bestHand;}
 
     /**
-     * Returns the value of a player's hand (1 = Royal Flush and so on).
+     * Returns the poker hand ranking for this player's best hand.
+     * Rankings from strongest to weakest: ROYAL_FLUSH, STRAIGHT_FLUSH,
+     * FOUR_OF_A_KIND, FULL_HOUSE, FLUSH, STRAIGHT, THREE_OF_A_KIND,
+     * TWO_PAIR, ONE_PAIR, HIGH_CARD.
      *
-     * @return the hand value of a player
+     * @return the HandRank enum representing the player's best hand
      */
-    public int getValueOfHand() {return valueOfHand;}
+    public HandRank getHandRank() {return handRank;}
 }

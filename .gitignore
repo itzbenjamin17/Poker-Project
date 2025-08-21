@@ -3,6 +3,8 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+Structure.txt
+Old Game Logic/
 
 ### STS ###
 .apt_generated

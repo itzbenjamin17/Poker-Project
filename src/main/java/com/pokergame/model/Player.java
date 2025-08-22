@@ -7,13 +7,14 @@ import java.util.List;
  * Represents a poker player with hole cards, chips, and betting capabilities.
  * Manages player state including folding, all-in status, and current bets.
  *
- * <p><b>WARNING:</b> Very little validation is done in this class make sure inputs to methods in this class are valid</p>
+ * <p><b>WARNING:</b> Very little validation is done in this class, make sure inputs to methods in this class are valid</p>
  *
  * @author Your Name
  * @version 1.0
  */
 public class Player {
     private final String name;
+    private final String playerId;
     private List<Card> holeCards;
     private List<Card> bestHand;
     private HandRank handRank;
@@ -29,8 +30,9 @@ public class Player {
      * @param name the player's name
      * @param chips the starting number of chips for the player
      */
-    public Player(String name, int chips) {
+    public Player(String name, String playerId, int chips) {
         this.name = name;
+        this.playerId = playerId;
         this.chips = chips;
         this.holeCards = new ArrayList<>();
         this.bestHand = new ArrayList<>();
@@ -51,7 +53,6 @@ public class Player {
         this.handRank = HandRank.NO_HAND;
         this.hasFolded = false;
         this.isAllIn = false;
-        this.isOut = false;
         this.currentBet = 0;
     }
 
@@ -108,7 +109,7 @@ public class Player {
     }
 
     /**
-     * Moves chips from player to pot and updates current bet.
+     * Moves chips from player to pot and updates the current bet.
      *
      * @param pot the current pot value
      * @param amount the amount of chips to pay
@@ -120,6 +121,21 @@ public class Player {
         pot += amount;
         return pot;
     }
+
+    /**
+     *Adds the amount (most likely from the pot) and adds it to the player's chips
+     * @param amount the amount to add to the chips
+     */
+    public void addChips(int amount) {
+        this.chips += amount;
+    }
+
+    /**
+     * Returns the player's hole cards.
+     *
+     * @return the player's hole card list
+     */
+     public List<Card> getHoleCards(){return holeCards;}
 
     /**
      * Returns the player's current bet in this round.
@@ -162,6 +178,7 @@ public class Player {
      *
      * @return true if the player is all-in, false otherwise
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean getIsAllIn() {
         return isAllIn;
     }
@@ -176,11 +193,26 @@ public class Player {
     }
 
     /**
+     * Sets the player to be out, should only be used when the player has no chips
+     *
+     */
+    public void setIsOut() {
+        this.isOut = true;
+    }
+
+    /**
      * Returns the player's best five-card poker hand.
      *
      * @return list of cards representing the best hand
      */
     public List<Card> getBestHand() {return bestHand;}
+
+    /**
+     * Returns the player's ID
+     *
+     * @return returns the player's ID
+     */
+    public String getPlayerId() {return playerId;}
 
     /**
      * Returns the poker hand ranking for this player's best hand.

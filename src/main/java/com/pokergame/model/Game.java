@@ -29,79 +29,36 @@ public class Game {
     public Game(String gameId, List<Player> players, HandEvaluatorService handEvaluator) {
         if (gameId == null || gameId.trim().isEmpty()) {
             throw new IllegalArgumentException("Game ID cannot be null or empty");
-
         }
-        else if (players == null || players.size() < 3) {
-            throw new IllegalArgumentException("At least 3 players are required to start a game");
+        if (players == null || players.size() < 2) {
+            throw new IllegalArgumentException("At least 2 players are required to start a game");
         }
-        else if (players.stream().anyMatch(Objects::isNull)) {
+        if (players.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("Player list cannot contain null elements");
         }
         this.gameId = gameId;
-        this.players = players;
-        this.activePlayers = players;
+        this.players = new ArrayList<>(players);
+        this.activePlayers = new ArrayList<>(players);
         this.deck = new Deck();
         this.communityCards = new ArrayList<>();
         this.pot = 0;
         this.dealerPosition = 0;
-        this.smallBlindPosition = 1;
-        this.bigBlindPosition = 2;
-        this.currentPlayerPosition = 3;
+        this.smallBlindPosition = 1 % players.size();
+        this.bigBlindPosition = 2 % players.size();
+        this.currentPlayerPosition = 3 % players.size();
         this.currentHighestBet = 0;
         this.currentPhase = GamePhase.PRE_FLOP;
         this.gameOver = false;
         this.handEvaluator = handEvaluator;
     }
 
-    /**
-     * Starts a new hand/round
-     */
-    public void startNewHand() {
-        // Check if only one player left
-        if (activePlayers.size() == 1) {
-            gameOver = true;
-            // In the full-stack app: send winner notification via WebSocket
-            return;
-        }
-
-        resetForNewHand();
-        dealHoleCards();
-        postBlinds();
-        currentPhase = GamePhase.PRE_FLOP;
-        currentHighestBet = BIG_BLIND;
-
-        // Pre-flop betting round
-        conductBettingRound();
-
-        if (!isHandOver()) {
-            dealFlop();
-            conductBettingRound();
-        }
-
-        if (!isHandOver()) {
-            dealTurn();
-            conductBettingRound();
-        }
-
-        if (!isHandOver()) {
-            dealRiver();
-            conductBettingRound();
-        }
-
-        if (!isHandOver()) {
-            conductShowdown();
-        }
-
-        cleanupAfterHand();
-        advancePositions();
-    }
-
-    private void resetForNewHand() {
-        // Reset deck and community cards
+    public void resetForNewHand() {
         deck = new Deck();
         communityCards.clear();
+        pot = 0;
+        currentHighestBet = 0;
+        currentPhase = GamePhase.PRE_FLOP;
 
-        // Remove players who are out
         activePlayers.clear();
         for (Player player : players) {
             if (!player.getIsOut()) {
@@ -110,272 +67,178 @@ public class Game {
             }
         }
 
-        if (activePlayers.size() == 1) {
+        if (activePlayers.size() <= 1) {
             gameOver = true;
-            // do something when the game is over
         }
     }
 
-    private void dealHoleCards() {
+    public void dealHoleCards() {
         for (Player player : activePlayers) {
             deck.dealCards(player.getHoleCards(), 2);
         }
-        // In the full-stack app: send cards to clients via WebSocket
     }
 
-    private void postBlinds() {
+    public void postBlinds() {
         if (activePlayers.size() >= 2) {
             Player smallBlindPlayer = activePlayers.get(smallBlindPosition);
             Player bigBlindPlayer = activePlayers.get(bigBlindPosition);
 
-            pot += smallBlindPlayer.payChips(pot,SMALL_BLIND);
-            pot += bigBlindPlayer.payChips(pot,BIG_BLIND);
-
-            // In full-stack app: notify clients of blind posts
-        }
-    }
-
-    private void conductBettingRound() {
-        resetBetsForRound();
-
-        int firstPlayer = getNextActivePlayer(dealerPosition);
-        int currentPlayer = firstPlayer;
-        boolean everyoneHadTurn = false;
-
-        do {
-            Player player = activePlayers.get(currentPlayer);
-
-            if (!player.getHasFolded() && !player.getIsAllIn()) {
-                // In the full-stack app: this comes from the client via API/WebSocket
-                PlayerDecision decision = getPlayerDecision(player);
-                processPlayerDecision(player, decision);
-
-                // In the full-stack app: broadcast action to all clients
-            }
-
-            currentPlayer = getNextActivePlayer(currentPlayer);
-
-            if (currentPlayer == firstPlayer) {
-                everyoneHadTurn = true;
-            }
-
-        } while (!isBettingRoundComplete() || !everyoneHadTurn);
-    }
-
-    /**
-     * Template method - in real app this gets decision from frontend
-     */
-    private PlayerDecision getPlayerDecision(Player player) {
-        // This would be replaced by actual client input handling
-        // For now, return a placeholder decision
-        if (player.getCurrentBet() < currentHighestBet) {
-            return new PlayerDecision(PlayerAction.CALL,
-                    currentHighestBet - player.getCurrentBet(), player.getPlayerId());
-        } else {
-            return new PlayerDecision(PlayerAction.CHECK, 0, player.getPlayerId());
+            this.pot = smallBlindPlayer.doAction(PlayerAction.BET, SMALL_BLIND, this.pot);
+            this.pot = bigBlindPlayer.doAction(PlayerAction.BET, BIG_BLIND, this.pot);
+            currentHighestBet = BIG_BLIND;
         }
     }
 
     public void processPlayerDecision(Player player, PlayerDecision decision) {
         switch (decision.action()) {
-            case FOLD -> player.doAction(PlayerAction.FOLD, 0, 0);
-
-            case CHECK -> // No chips moved
-                    player.doAction(PlayerAction.CHECK, 0, 0);
-
+            case FOLD, CHECK -> player.doAction(decision.action(), 0, this.pot);
             case CALL, BET, RAISE -> {
                 int amount = calculateActualAmount(player, decision);
-                pot += player.doAction(decision.action(), amount, pot);
-                if (amount > currentHighestBet) {
-                    currentHighestBet = amount;
+                this.pot = player.doAction(decision.action(), amount, this.pot);
+                if (player.getCurrentBet() > currentHighestBet) {
+                    currentHighestBet = player.getCurrentBet();
                 }
             }
-            case ALL_IN -> pot += player.doAction(PlayerAction.ALL_IN, 0, pot);
+            case ALL_IN -> this.pot = player.doAction(PlayerAction.ALL_IN, 0, this.pot);
         }
     }
 
     private int calculateActualAmount(Player player, PlayerDecision decision) {
-        // Calculate the actual amount needed based on the action type
-        switch (decision.action()) {
-            case CALL -> {
-                return currentHighestBet - player.getCurrentBet();
-            }
-            case BET, RAISE -> {
-                return decision.amount();
-            }
-            default -> throw new IllegalArgumentException("Invalid, cannot calculate the amount needed for decision: " + decision.action());
-        }
+        return switch (decision.action()) {
+            case CALL -> currentHighestBet - player.getCurrentBet();
+            case BET, RAISE -> decision.amount();
+            default -> 0;
+        };
     }
 
-    private boolean isBettingRoundComplete() {
+    public boolean isBettingRoundComplete() {
+        // All active players have either folded, are all-in, or have matched the current highest bet.
         return activePlayers.stream()
                 .filter(p -> !p.getHasFolded() && !p.getIsAllIn())
-                .allMatch(p -> p.getCurrentBet() >= currentHighestBet);
+                .allMatch(p -> p.getCurrentBet() == currentHighestBet);
     }
 
-    private void dealFlop() {
+    public void dealFlop() {
         deck.dealCards(communityCards, 3);
         currentPhase = GamePhase.FLOP;
-        // In the full-stack app: send flop state to clients
+        resetBetsForRound();
     }
 
-    private void dealTurn() {
+    public void dealTurn() {
         deck.dealCards(communityCards, 1);
         currentPhase = GamePhase.TURN;
-        // In the full-stack app: send turn state to clients
+        resetBetsForRound();
     }
 
-    private void dealRiver() {
+    public void dealRiver() {
         deck.dealCards(communityCards, 1);
         currentPhase = GamePhase.RIVER;
-        // In the full-stack app: send river state to clients
+        resetBetsForRound();
     }
 
-    private void conductShowdown() {
+    public List<Player> conductShowdown() {
         currentPhase = GamePhase.SHOWDOWN;
 
         List<Player> showdownPlayers = activePlayers.stream()
                 .filter(p -> !p.getHasFolded())
                 .toList();
 
-        // Template for hand evaluation - you'll implement this
+        if (showdownPlayers.size() == 1) {
+            distributePot(showdownPlayers);
+            return showdownPlayers;
+        }
+
         evaluateHands(showdownPlayers);
         List<Player> winners = determineWinners(showdownPlayers);
         distributePot(winners);
 
-        // In full-stack app: send showdown results to clients
-        // broadcastShowdownResults(winners, showdownPlayers);
+        return winners;
     }
 
-    /**
-     * Template method - implement your hand evaluation here
-     */
     private void evaluateHands(List<Player> players) {
         for (Player player : players) {
-            // Use injected HandEvaluatorService
             HandEvaluationResult result = handEvaluator.getBestHand(communityCards, player.getHoleCards());
             player.setBestHand(result.bestHand());
             player.setHandRank(result.handRank());
         }
     }
 
-    /**
-     * Template method - implement winner determination here
-     */
     private List<Player> determineWinners(List<Player> players) {
-        // Sort players by hand strength
-        players.sort((p1, p2) -> {
-            // Compare hand ranks first
-            int rankComparison = p1.getHandRank().compareTo(p2.getHandRank());
-            if (rankComparison != 0) {
-                return -rankComparison; // Best rank first
-            }
-
-            // Same rank - use detailed comparison from service
-            if (handEvaluator.isBetterHandOfSameRank(p1.getBestHand(), p2.getBestHand(), p1.getHandRank())) {
-                return -1; // p1 wins
-            } else if (handEvaluator.isBetterHandOfSameRank(p2.getBestHand(), p1.getBestHand(), p2.getHandRank())) {
-                return 1; // p2 wins
-            }
-            return 0; // Tie
-        });
-
-        // Collect all winners (including ties)
+        players.sort(Comparator.comparing(Player::getHandRank).reversed());
+        if (players.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Player bestPlayer = players.getFirst();
         List<Player> winners = new ArrayList<>();
-        Player bestPlayer = players.get(0);
         winners.add(bestPlayer);
 
         for (int i = 1; i < players.size(); i++) {
-            Player current = players.get(i);
-
-            if (bestPlayer.getHandRank() != current.getHandRank()) {
-                break; // Different rank = not a winner
-            }
-
-            // Check if hands are identical (tie)
-            boolean p1Better = handEvaluator.isBetterHandOfSameRank(bestPlayer.getBestHand(), current.getBestHand(), bestPlayer.getHandRank());
-            boolean p2Better = handEvaluator.isBetterHandOfSameRank(current.getBestHand(), bestPlayer.getBestHand(), current.getHandRank());
-
-            if (!p1Better && !p2Better) {
-                winners.add(current); // It's a tie
+            Player currentPlayer = players.get(i);
+            if (currentPlayer.getHandRank() == bestPlayer.getHandRank()) {
+                if (!handEvaluator.isBetterHandOfSameRank(bestPlayer.getBestHand(), currentPlayer.getBestHand(), bestPlayer.getHandRank()) &&
+                        !handEvaluator.isBetterHandOfSameRank(currentPlayer.getBestHand(), bestPlayer.getBestHand(), bestPlayer.getHandRank())) {
+                    winners.add(currentPlayer);
+                }
             } else {
-                break; // Current player lost
+                break;
             }
         }
-
         return winners;
     }
 
     private void distributePot(List<Player> winners) {
-        if (winners.size() == 1) {
-            winners.getFirst().addChips(pot);
-        } else {
-            int payoutPerWinner = pot / winners.size();
-            int remainder = pot % winners.size();
+        if (winners.isEmpty()) {
+            return;
+        }
+        int potShare = pot / winners.size();
+        for (Player winner : winners) {
+            winner.addChips(potShare);
+        }
+        pot %= winners.size(); // Any remainder stays for the next hand
+    }
 
-            for (Player winner : winners) {
-                winner.addChips(payoutPerWinner);
+    public void advancePositions() {
+        dealerPosition = (dealerPosition + 1) % activePlayers.size();
+        smallBlindPosition = (dealerPosition + 1) % activePlayers.size();
+        bigBlindPosition = (smallBlindPosition + 1) % activePlayers.size();
+        currentPlayerPosition = (bigBlindPosition + 1) % activePlayers.size();
+    }
+
+    public void cleanupAfterHand() {
+        players.forEach(p -> {
+            if (p.getChips() == 0) {
+                p.setIsOut();
             }
-            // Remainder stays in pot for next hand
-            pot = remainder;
-        }
+        });
+        activePlayers.removeIf(Player::getIsOut);
 
-        if (winners.size() == 1) {
-            pot = 0;
-        }
-    }
-
-    private void cleanupAfterHand() {
-        // Mark players as out if they have no chips and then remove them from active players
-        for (Player player : players) {
-            if (player.getChips() == 0) {
-                player.setIsOut();
-            }
+        if (activePlayers.size() <= 1) {
+            gameOver = true;
         }
     }
 
-    private void advancePositions() {
-        // Move dealer button and blinds
-        if (activePlayers.size() == 2) {
-            // Heads up rules
-            dealerPosition = (dealerPosition + 1) % activePlayers.size();
-            smallBlindPosition = dealerPosition;
-            bigBlindPosition = (dealerPosition + 1) % activePlayers.size();
-        } else {
-            dealerPosition = getNextActivePlayer(dealerPosition);
-            smallBlindPosition = getNextActivePlayer(dealerPosition);
-            bigBlindPosition = getNextActivePlayer(smallBlindPosition);
-        }
-        currentPlayerPosition = getNextActivePlayer(bigBlindPosition);
+    public boolean isHandOver() {
+        long activePlayerCount = activePlayers.stream().filter(p -> !p.getHasFolded()).count();
+        return activePlayerCount <= 1;
     }
 
-    private int getNextActivePlayer(int currentPosition) {
-        int nextPosition = (currentPosition + 1) % activePlayers.size();
-        while (activePlayers.get(nextPosition).getHasFolded()) {
-            nextPosition = (nextPosition + 1) % activePlayers.size();
-        }
-        return nextPosition;
-    }
-
-    private void resetBetsForRound() {
+    public void resetBetsForRound() {
         for (Player player : activePlayers) {
             player.resetCurrentBet();
         }
         currentHighestBet = 0;
     }
 
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    private boolean isHandOver() {
-        long activePlayers = this.activePlayers.stream()
-                .filter(p -> !p.getHasFolded() && !p.getIsOut())
-                .count();
-        return activePlayers <= 1;
-    }
-
-    // Getters and setters
+    // Getters and Setters
     public String getGameId() { return gameId; }
     public List<Player> getPlayers() { return players; }
     public List<Player> getActivePlayers() { return activePlayers; }
+    public Player getCurrentPlayer() {
+        return activePlayers.get(currentPlayerPosition);
+    }
+    public void nextPlayer() {
+        currentPlayerPosition = (currentPlayerPosition + 1) % activePlayers.size();
+    }
     public List<Card> getCommunityCards() { return communityCards; }
     public int getPot() { return pot; }
     public GamePhase getCurrentPhase() { return currentPhase; }

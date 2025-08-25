@@ -2,6 +2,7 @@ package com.pokergame.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID; // Import UUID
 
 /**
  * Represents a poker player with hole cards, chips, and betting capabilities.
@@ -15,6 +16,7 @@ import java.util.List;
 public class Player {
     private final String name;
     private final String playerId;
+    private final String secretToken; // A secret token to authorize actions
     private List<Card> holeCards;
     private List<Card> bestHand;
     private HandRank handRank;
@@ -39,6 +41,7 @@ public class Player {
         }
         this.name = name;
         this.playerId = playerId;
+        this.secretToken = UUID.randomUUID().toString(); // Generate a unique secret token
         this.chips = chips;
         this.holeCards = new ArrayList<>();
         this.bestHand = new ArrayList<>();
@@ -87,8 +90,8 @@ public class Player {
      * Executes a player action and returns the updated pot value.
      *
      * <p><b>IMPORTANT:</b> The caller is responsible for calculating the correct
-     *  amount needed for betting actions (BET, RAISE, CALL). This method does NOT
-     *  validate or calculate bet amounts - it uses the provided amount directly.</p>
+     * amount needed for betting actions (BET, RAISE, CALL). This method does NOT
+     * validate or calculate bet amounts - it uses the provided amount directly.</p>
      * @param action the poker action to perform (FOLD, CHECK, CALL, BET, RAISE, ALL_IN)
      * @param amount the chip amount for betting actions (ignored for FOLD, CHECK, ALL_IN)
      * @param pot the current pot value
@@ -141,7 +144,7 @@ public class Player {
      *
      * @return the player's hole card list
      */
-     public List<Card> getHoleCards(){return holeCards;}
+    public List<Card> getHoleCards(){return holeCards;}
 
     /**
      * Returns the player's current bet in this round.
@@ -220,6 +223,15 @@ public class Player {
      * @return returns the player's ID
      */
     public String getPlayerId() {return playerId;}
+
+    /**
+     * Returns the player's secret token.
+     *
+     * @return the secret token
+     */
+    public String getSecretToken() {
+        return secretToken;
+    }
 
     /**
      * Returns the poker hand ranking for this player's best hand.

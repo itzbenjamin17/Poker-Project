@@ -1,5 +1,6 @@
 package com.pokergame.service;
 
+import com.pokergame.dto.PlayerActionRequest;
 import com.pokergame.model.Game;
 import com.pokergame.model.Player;
 import com.pokergame.dto.PlayerDecision;
@@ -14,41 +15,115 @@ public class GameService {
 
     @Autowired
     private HandEvaluatorService handEvaluator;
-    private Map<String, Game> activeGames = new HashMap<>();
+    private final Map<String, Game> activeGames = new HashMap<>();
 
-    // Service-level operations - THESE BELONG HERE
     public String createGame(List<String> playerNames) {
         String gameId = UUID.randomUUID().toString();
         List<Player> players = playerNames.stream()
                 .map(name -> new Player(name, UUID.randomUUID().toString(), 100))
                 .collect(Collectors.toList());
 
-        Game game = new Game(gameId, players, handEvaluator);  // Inject service
+        Game game = new Game(gameId, players, handEvaluator);
         activeGames.put(gameId, game);
+
+        startNewHand(gameId);
 
         return gameId;
     }
-    //TODO Fix this as it should correspond to process player decision
-    public void processPlayerAction(PlayerDecision decision, String gameId) {
+
+    public void startNewHand(String gameId) {
         Game game = getGame(gameId);
-        Player player = findPlayer(game, decision.playerId());
+        if (game.isGameOver()) {
+            return;
+        }
 
-        // Validate the decision
-        validateDecision(player, game, decision);
+        game.resetForNewHand();
+        game.dealHoleCards();
+        game.postBlinds();
 
-        game.processPlayerDecision(player, decision);
+        conductBettingRound(gameId);
+    }
 
-        // Handle external concerns
-        broadcastGameState(game);  // WebSocket broadcasting
-        saveGame(game);           // Persistence
+    public void processPlayerAction(String gameId, String secretToken, PlayerActionRequest actionRequest) {
+        Game game = getGame(gameId);
+        Player currentPlayer = game.getCurrentPlayer();
+
+        // --- SECURITY CHECK ---
+        if (!currentPlayer.getSecretToken().equals(secretToken)) {
+            throw new SecurityException("Invalid token. You are not authorized to perform this action.");
+        }
+        // --- END OF CHECK ---
+
+        PlayerDecision decision = new PlayerDecision(
+                actionRequest.action(),
+                actionRequest.amount() != null ? actionRequest.amount() : 0,
+                currentPlayer.getPlayerId()
+        );
+
+        game.processPlayerDecision(currentPlayer, decision);
+
+        if (game.isBettingRoundComplete()) {
+            advanceGame(gameId);
+        } else {
+            game.nextPlayer();
+        }
+    }
+
+    private void conductBettingRound(String gameId) {
+        Game game = getGame(gameId);
+
+        while (!game.isHandOver() && !game.isBettingRoundComplete()) {
+            Player currentPlayer = game.getCurrentPlayer();
+            if (currentPlayer.getHasFolded() || currentPlayer.getIsAllIn()) {
+                game.nextPlayer();
+                continue;
+            }
+            game.nextPlayer();
+        }
+
+        advanceGame(gameId);
+    }
+
+    private void advanceGame(String gameId) {
+        Game game = getGame(gameId);
+        if (game.isHandOver()) {
+            game.conductShowdown();
+            game.cleanupAfterHand();
+            game.advancePositions();
+            startNewHand(gameId);
+            return;
+        }
+
+        switch (game.getCurrentPhase()) {
+            case PRE_FLOP:
+                game.dealFlop();
+                conductBettingRound(gameId);
+                break;
+            case FLOP:
+                game.dealTurn();
+                conductBettingRound(gameId);
+                break;
+            case TURN:
+                game.dealRiver();
+                conductBettingRound(gameId);
+                break;
+            case RIVER:
+                game.conductShowdown();
+                game.cleanupAfterHand();
+                game.advancePositions();
+                startNewHand(gameId);
+                break;
+        }
     }
 
     public Game getGame(String gameId) {
         return activeGames.get(gameId);
     }
 
-    // External concerns
-    private void broadcastGameState(Game game) { ... }
-    private void saveGame(Game game) { ... }
+    private Player findPlayer(Game game, String playerId) {
+        return game.getPlayers().stream()
+                .filter(p -> p.getPlayerId().equals(playerId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Player not found"));
+    }
 }
-

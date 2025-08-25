@@ -23,6 +23,15 @@ public class Card {
      * @param rank the rank of the card (e.g., "Ace", "King", "2")
      */
     public Card(int value, String suit, String rank) {
+        if (value < 2 || value > 14) {
+            throw new IllegalArgumentException("Invalid card value: " + value);
+        }
+        if (suit == null || suit.trim().isEmpty()) {
+            throw new IllegalArgumentException("Card suit cannot be null or empty");
+        }
+        if (rank == null || rank.trim().isEmpty()){
+            throw new IllegalArgumentException("Card rank cannot be null or empty");
+        }
         this.value = value;
         this.suit = suit;
         this.rank = rank;

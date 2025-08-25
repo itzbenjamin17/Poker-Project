@@ -1,5 +1,8 @@
 package com.pokergame.model;
 
+import com.pokergame.dto.PlayerDecision;
+import com.pokergame.service.HandEvaluatorService;
+
 import java.util.*;
 
 public class Game {
@@ -8,11 +11,11 @@ public class Game {
     private static final int SMALL_BLIND = 1;
     private static final int BIG_BLIND = 2;
 
-    private String gameId;
-    private List<Player> players;
-    private List<Player> activePlayers;
+    private final String gameId;
+    private final List<Player> players;
+    private final List<Player> activePlayers;
     private Deck deck;
-    private List<Card> communityCards;
+    private final List<Card> communityCards;
     private int pot;
     private int dealerPosition;
     private int smallBlindPosition;
@@ -21,8 +24,19 @@ public class Game {
     private int currentHighestBet;
     private GamePhase currentPhase;
     private boolean gameOver;
+    private final HandEvaluatorService handEvaluator;
 
-    public Game(String gameId, List<Player> players) {
+    public Game(String gameId, List<Player> players, HandEvaluatorService handEvaluator) {
+        if (gameId == null || gameId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Game ID cannot be null or empty");
+
+        }
+        else if (players == null || players.size() < 3) {
+            throw new IllegalArgumentException("At least 3 players are required to start a game");
+        }
+        else if (players.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("Player list cannot contain null elements");
+        }
         this.gameId = gameId;
         this.players = players;
         this.activePlayers = players;
@@ -36,6 +50,7 @@ public class Game {
         this.currentHighestBet = 0;
         this.currentPhase = GamePhase.PRE_FLOP;
         this.gameOver = false;
+        this.handEvaluator = handEvaluator;
     }
 
     /**
@@ -161,8 +176,8 @@ public class Game {
         }
     }
 
-    private void processPlayerDecision(Player player, PlayerDecision decision) {
-        switch (decision.getAction()) {
+    public void processPlayerDecision(Player player, PlayerDecision decision) {
+        switch (decision.action()) {
             case FOLD -> player.doAction(PlayerAction.FOLD, 0, 0);
 
             case CHECK -> // No chips moved
@@ -170,7 +185,7 @@ public class Game {
 
             case CALL, BET, RAISE -> {
                 int amount = calculateActualAmount(player, decision);
-                pot += player.doAction(decision.getAction(), amount, pot);
+                pot += player.doAction(decision.action(), amount, pot);
                 if (amount > currentHighestBet) {
                     currentHighestBet = amount;
                 }
@@ -181,14 +196,14 @@ public class Game {
 
     private int calculateActualAmount(Player player, PlayerDecision decision) {
         // Calculate the actual amount needed based on the action type
-        switch (decision.getAction()) {
+        switch (decision.action()) {
             case CALL -> {
                 return currentHighestBet - player.getCurrentBet();
             }
             case BET, RAISE -> {
-                return decision.getAmount();
+                return decision.amount();
             }
-            default -> throw new IllegalArgumentException("Invalid, cannot calculate the amount needed for decision: " + decision.getAction());
+            default -> throw new IllegalArgumentException("Invalid, cannot calculate the amount needed for decision: " + decision.action());
         }
     }
 
@@ -228,7 +243,8 @@ public class Game {
         List<Player> winners = determineWinners(showdownPlayers);
         distributePot(winners);
 
-        // In the full-stack app: send showdown results to clients
+        // In full-stack app: send showdown results to clients
+        // broadcastShowdownResults(winners, showdownPlayers);
     }
 
     /**
@@ -236,9 +252,10 @@ public class Game {
      */
     private void evaluateHands(List<Player> players) {
         for (Player player : players) {
-            // TODO: Implement hand evaluation
-            // player.setBestHand(findBestHand(player.getHoleCards(), communityCards));
-            // player.setHandRank(evaluateHandRank(player.getBestHand()));
+            // Use injected HandEvaluatorService
+            HandEvaluationResult result = handEvaluator.getBestHand(communityCards, player.getHoleCards());
+            player.setBestHand(result.bestHand());
+            player.setHandRank(result.handRank());
         }
     }
 
@@ -246,9 +263,47 @@ public class Game {
      * Template method - implement winner determination here
      */
     private List<Player> determineWinners(List<Player> players) {
-        // TODO: Implement winner determination logic
-        // This would use your tiebreak methods
-        return players; // Placeholder
+        // Sort players by hand strength
+        players.sort((p1, p2) -> {
+            // Compare hand ranks first
+            int rankComparison = p1.getHandRank().compareTo(p2.getHandRank());
+            if (rankComparison != 0) {
+                return -rankComparison; // Best rank first
+            }
+
+            // Same rank - use detailed comparison from service
+            if (handEvaluator.isBetterHandOfSameRank(p1.getBestHand(), p2.getBestHand(), p1.getHandRank())) {
+                return -1; // p1 wins
+            } else if (handEvaluator.isBetterHandOfSameRank(p2.getBestHand(), p1.getBestHand(), p2.getHandRank())) {
+                return 1; // p2 wins
+            }
+            return 0; // Tie
+        });
+
+        // Collect all winners (including ties)
+        List<Player> winners = new ArrayList<>();
+        Player bestPlayer = players.get(0);
+        winners.add(bestPlayer);
+
+        for (int i = 1; i < players.size(); i++) {
+            Player current = players.get(i);
+
+            if (bestPlayer.getHandRank() != current.getHandRank()) {
+                break; // Different rank = not a winner
+            }
+
+            // Check if hands are identical (tie)
+            boolean p1Better = handEvaluator.isBetterHandOfSameRank(bestPlayer.getBestHand(), current.getBestHand(), bestPlayer.getHandRank());
+            boolean p2Better = handEvaluator.isBetterHandOfSameRank(current.getBestHand(), bestPlayer.getBestHand(), current.getHandRank());
+
+            if (!p1Better && !p2Better) {
+                winners.add(current); // It's a tie
+            } else {
+                break; // Current player lost
+            }
+        }
+
+        return winners;
     }
 
     private void distributePot(List<Player> winners) {

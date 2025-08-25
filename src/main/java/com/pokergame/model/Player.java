@@ -31,6 +31,12 @@ public class Player {
      * @param chips the starting number of chips for the player
      */
     public Player(String name, String playerId, int chips) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("Player name required");
+        }
+        if (chips < 0) {
+            throw new IllegalArgumentException("Chips cannot be negative");
+        }
         this.name = name;
         this.playerId = playerId;
         this.chips = chips;
@@ -188,6 +194,7 @@ public class Player {
      *
      * @return true if the player is out, false otherwise
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean getIsOut() {
         return isOut;
     }
@@ -223,4 +230,12 @@ public class Player {
      * @return the HandRank enum representing the player's best hand
      */
     public HandRank getHandRank() {return handRank;}
+
+    public void setBestHand(List<Card> cards) {
+        bestHand = cards;
+    }
+
+    public void setHandRank(HandRank handRank) {
+        this.handRank = handRank;
+    }
 }

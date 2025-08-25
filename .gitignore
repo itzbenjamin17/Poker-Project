@@ -33,3 +33,8 @@ build/
 
 ### VS Code ###
 .vscode/
+/Action Examples.txt
+/Architecture.txt
+/Player Action Flow.txt
+/Real Time Updates Flow.txt
+/TODO.txt

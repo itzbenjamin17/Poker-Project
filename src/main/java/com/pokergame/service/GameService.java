@@ -1,6 +1,7 @@
 package com.pokergame.service;
 
 import com.pokergame.dto.PlayerActionRequest;
+import com.pokergame.model.Card;
 import com.pokergame.model.Game;
 import com.pokergame.model.Player;
 import com.pokergame.dto.PlayerDecision;
@@ -87,7 +88,8 @@ public class GameService {
     private void advanceGame(String gameId) {
         Game game = getGame(gameId);
         if (game.isHandOver()) {
-            game.conductShowdown();
+            List<Player> winners = game.conductShowdown();
+            //broadcast winners
             game.cleanupAfterHand();
             game.advancePositions();
             startNewHand(gameId);
@@ -109,6 +111,8 @@ public class GameService {
                 break;
             case RIVER:
                 game.conductShowdown();
+                List<Player> winners = game.conductShowdown();
+                //broadcast winners
                 game.cleanupAfterHand();
                 game.advancePositions();
                 startNewHand(gameId);

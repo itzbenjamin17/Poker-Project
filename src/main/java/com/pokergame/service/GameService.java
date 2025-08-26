@@ -1,7 +1,7 @@
 package com.pokergame.service;
 
+import com.pokergame.dto.CreateGameRequest;
 import com.pokergame.dto.PlayerActionRequest;
-import com.pokergame.model.Card;
 import com.pokergame.model.Game;
 import com.pokergame.model.Player;
 import com.pokergame.dto.PlayerDecision;
@@ -32,6 +32,22 @@ public class GameService {
         return gameId;
     }
 
+    public String createGame(List<String> playerNames, CreateGameRequest request) {
+        String gameId = UUID.randomUUID().toString();
+        List<Player> players = playerNames.stream()
+                .map(name -> new Player(name, UUID.randomUUID().toString(), request.startingChips()))
+                .collect(Collectors.toList());
+
+        // You would need to update your Game constructor to accept these parameters
+        // For now, we are just creating the game object.
+        Game game = new Game(gameId, players, handEvaluator); // Assumes Game constructor is updated
+        activeGames.put(gameId, game);
+
+        startNewHand(gameId);
+
+        return gameId;
+    }
+
     public void startNewHand(String gameId) {
         Game game = getGame(gameId);
         if (game.isGameOver()) {
@@ -49,11 +65,9 @@ public class GameService {
         Game game = getGame(gameId);
         Player currentPlayer = game.getCurrentPlayer();
 
-        // --- SECURITY CHECK ---
         if (!currentPlayer.getSecretToken().equals(secretToken)) {
             throw new SecurityException("Invalid token. You are not authorized to perform this action.");
         }
-        // --- END OF CHECK ---
 
         PlayerDecision decision = new PlayerDecision(
                 actionRequest.action(),

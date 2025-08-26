@@ -9,7 +9,7 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.pokergame</groupId>
-    <artifactId>Poker-Backend</artifactId>
+    <artifactId>Poker-Project</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>Poker-Backend</name>
     <description>Poker-Backend</description>

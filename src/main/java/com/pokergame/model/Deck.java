@@ -10,9 +10,6 @@ import java.util.Map;
  * The deck is automatically shuffled upon creation and provides methods
  * to deal and remove cards.
  *
- *
- * @author Benjamin Adubofour
- * @version 1.0
  */
 public class Deck {
     private List<Card> cards;

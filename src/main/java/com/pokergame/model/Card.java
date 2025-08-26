@@ -6,9 +6,6 @@ package com.pokergame.model;
  *
  * <p><b>WARNING:</b> Almost no validation is done in this class,
  * validation should be done where this class is being used when creating it</p>
- *
- * @author Benjamin Adubofour
- * @version 1.0
  */
 public class Card {
     private final int value;

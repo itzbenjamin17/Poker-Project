@@ -10,8 +10,6 @@ import java.util.UUID; // Import UUID
  *
  * <p><b>WARNING:</b> Very little validation is done in this class, make sure inputs to methods in this class are valid</p>
  *
- * @author Your Name
- * @version 1.0
  */
 public class Player {
     private final String name;

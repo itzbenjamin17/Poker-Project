@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom"
+import { useRoomWebSocket } from "../hooks/useRoomWebSocket"
 
 function LobbyPage() {
     const navigate = useNavigate()
@@ -14,10 +15,55 @@ function LobbyPage() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
 
-    // Replace the fetchPlayers function with better debugging:
-    const fetchPlayers = useCallback(async () => {
+
+
+    const handleRoomUpdate = useCallback((roomData) => {
+        if (roomData === null) {
+            // Room was closed
+            navigate("/", { 
+                state: { 
+                    message: "The room has been closed by the host." 
+                } 
+            });
+            return;
+        }
+
+        // Smart merge: preserve existing room info but update players
+        if (roomData.players) {
+            setPlayers(roomData.players);
+        }
+        
+        // Only update room info if we have meaningful data
+        // This prevents WebSocket updates from overriding REST API data
+        setRoomInfo(prevRoomInfo => {
+            if (!prevRoomInfo) {
+                return roomData;
+            }
+            
+            // Merge, keeping existing room metadata but updating dynamic data
+            return {
+                ...prevRoomInfo,
+                players: roomData.players || prevRoomInfo.players,
+                // Keep the original room creation data intact
+                roomName: prevRoomInfo.roomName,
+                maxPlayers: prevRoomInfo.maxPlayers,
+                buyIn: prevRoomInfo.buyIn,
+                smallBlind: prevRoomInfo.smallBlind,
+                bigBlind: prevRoomInfo.bigBlind,
+                createdAt: prevRoomInfo.createdAt,
+                hostName: prevRoomInfo.hostName
+            };
+        });
+        
+        setError("");
+        }, [navigate]);
+
+    const { connected } = useRoomWebSocket(roomId, playerName, handleRoomUpdate);
+
+    // Fetch initial room data when component first loads (for direct navigation/refresh)
+    const fetchInitialRoomData = useCallback(async () => {
         try {
-            console.log('Fetching room info for roomId:', roomId);
+            console.log('Fetching initial room info for roomId:', roomId);
             console.log('Current playerName:', playerName);
             
             const response = await fetch(`http://localhost:8080/api/game/room/${roomId}`);
@@ -26,24 +72,13 @@ function LobbyPage() {
             
             if (response.ok) {
                 const roomData = await response.json();
-                console.log('Room data received:', roomData);
-                console.log('Players array:', roomData.players);
-                
-                // Validate each player has a name
-                if (roomData.players) {
-                    roomData.players.forEach((player, index) => {
-                        console.log(`Player ${index}:`, player);
-                        if (!player.name) {
-                            console.error('Player missing name:', player);
-                        }
-                    });
-                }
+                console.log('Initial room data received:', roomData);
                 
                 setPlayers(roomData.players || []);
                 setRoomInfo(roomData);
                 setError(""); // Clear any previous errors
             } else {
-                console.error('Failed to fetch room info:', response.status, response.statusText);
+                console.error('Failed to fetch initial room info:', response.status, response.statusText);
                 const errorText = await response.text();
                 console.error('Error response:', errorText);
                 
@@ -61,27 +96,17 @@ function LobbyPage() {
                 }
             }
         } catch (error) {
-            console.error('Error fetching room info:', error);
+            console.error('Error fetching initial room info:', error);
             setError('Failed to connect to server');
         }
     }, [roomId, playerName, navigate]);
-    
-
 
     useEffect(() => {
-        // Fetch room info immediately when component mounts
-        fetchPlayers();
-
-        // Poll for updates every 2 seconds
-        const interval = setInterval(fetchPlayers, 2000);
-
-        // Cleanup function that runs when component unmounts
-        return () => {
-            clearInterval(interval);
-            // Don't automatically leave the room on component unmount
-            // Only leave when explicitly clicking the leave button
-        };
-    }, [fetchPlayers]);
+        // Fetch initial room info when component mounts (for page refresh/direct navigation)
+        fetchInitialRoomData();
+        
+        // No polling - WebSocket will handle real-time updates
+    }, [fetchInitialRoomData]);
 
     const handleStartGame = async () => {
         try {
@@ -160,6 +185,10 @@ function LobbyPage() {
             <div className="lobby-container">
                 <div className="room-info-card">
                     <h2>{roomInfo?.roomName || formData?.roomName || "Poker Room"}</h2>
+                    <div className="connection-status">
+                        <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}></span>
+                        {connected ? 'Connected' : 'Connecting...'}
+                    </div>
                     <div className="room-details">
                         <div className="detail-item">
                             <span className="label">Max Players:</span>

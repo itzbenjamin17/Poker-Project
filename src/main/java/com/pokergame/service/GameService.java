@@ -7,6 +7,9 @@ import com.pokergame.model.Game;
 import com.pokergame.model.Player;
 import com.pokergame.model.Room;
 import com.pokergame.dto.PlayerDecision;
+import com.pokergame.dto.WebSocketMessage;
+import com.pokergame.websocket.RoomWebSocketHandler;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +25,8 @@ public class GameService {
     private final Map<String, Game> activeGames = new HashMap<>();
     private Map<String, Room> rooms = new ConcurrentHashMap<>();
     private Map<String, String> roomHosts = new ConcurrentHashMap<>();
+    @Autowired
+    private RoomWebSocketHandler webSocketHandler;
 
     /**
      * Create a room/lobby (NOT a game yet)
@@ -51,6 +56,9 @@ public class GameService {
         rooms.put(roomId, room);
         roomHosts.put(roomId, request.getPlayerName());
 
+        webSocketHandler.broadcastToRoom(roomId,
+                new WebSocketMessage("ROOM_CREATED", roomId, room));
+
         return roomId;
     }
 
@@ -79,6 +87,9 @@ public class GameService {
         }
 
         room.addPlayer(playerName);
+
+        webSocketHandler.broadcastToRoom(roomId,
+                new WebSocketMessage("PLAYER_JOINED", roomId, getRoomData(roomId)));
     }
 
     /**
@@ -86,6 +97,43 @@ public class GameService {
      */
     public Room getRoom(String roomId) {
         return rooms.get(roomId);
+    }
+
+    /**
+     * Get formatted room data for API responses and WebSocket broadcasts
+     */
+    public Map<String, Object> getRoomData(String roomId) {
+        Room room = rooms.get(roomId);
+        if (room == null) {
+            return null;
+        }
+
+        // Convert player names to player objects with isHost flag
+        List<Map<String, Object>> playerObjects = room.getPlayers().stream()
+                .map(playerName -> {
+                    Map<String, Object> playerMap = new HashMap<>();
+                    playerMap.put("name", playerName);
+                    playerMap.put("isHost", isRoomHost(roomId, playerName));
+                    playerMap.put("joinedAt", "recently");
+                    return playerMap;
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        // Create the room data map
+        Map<String, Object> roomData = new HashMap<>();
+        roomData.put("roomId", roomId);
+        roomData.put("roomName", room.getRoomName());
+        roomData.put("maxPlayers", room.getMaxPlayers());
+        roomData.put("buyIn", room.getBuyIn());
+        roomData.put("smallBlind", room.getSmallBlind());
+        roomData.put("bigBlind", room.getBigBlind());
+        roomData.put("createdAt", room.getCreatedAt());
+        roomData.put("hostName", room.getHostName());
+        roomData.put("players", playerObjects);
+        roomData.put("currentPlayers", playerObjects.size());
+        roomData.put("canStartGame", playerObjects.size() >= 2);
+
+        return roomData;
     }
 
     /**
@@ -171,14 +219,20 @@ public class GameService {
 
         // Check if the leaving player is the host
         if (isRoomHost(roomId, playerName)) {
-            // Host is leaving - destroy the entire room
+            // Host is leaving - destroy the entire Room
+            webSocketHandler.broadcastToRoom(roomId,
+                    new WebSocketMessage("ROOM_CLOSED", roomId, null));
             destroyRoom(roomId);
         } else {
             // Regular player leaving - just remove them from the room
             room.removePlayer(playerName);
+            webSocketHandler.broadcastToRoom(roomId,
+                    new WebSocketMessage("PLAYER_LEFT", roomId, getRoomData(roomId)));
 
             // If no players left after removal, also destroy the room
             if (room.getPlayers().isEmpty()) {
+                webSocketHandler.broadcastToRoom(roomId,
+                        new WebSocketMessage("ROOM_CLOSED", roomId, null));
                 destroyRoom(roomId);
             }
         }

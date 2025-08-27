@@ -103,35 +103,12 @@ public class GameController {
     @GetMapping("/room/{roomId}")
     public ResponseEntity<?> getRoomInfo(@PathVariable String roomId) {
         try {
-            Room room = gameService.getRoom(roomId);
-            if (room == null) {
+            Map<String, Object> roomData = gameService.getRoomData(roomId);
+            if (roomData == null) {
                 return ResponseEntity.notFound().build();
             }
 
-            // Convert player names to player objects with isHost flag
-            List<Map<String, Object>> playerObjects = room.getPlayers().stream()
-                    .map(playerName -> {
-                        Map<String, Object> playerMap = new HashMap<>();
-                        playerMap.put("name", playerName);
-                        playerMap.put("isHost", gameService.isRoomHost(roomId, playerName));
-                        playerMap.put("joinedAt", "recently"); // You can track this better later
-                        return playerMap;
-                    })
-                    .collect(java.util.stream.Collectors.toList());
-
-            Map<String, Object> response = Map.of(
-                    "roomId", room.getRoomId(),
-                    "roomName", room.getRoomName(),
-                    "hostName", room.getHostName(),
-                    "players", playerObjects,
-                    "maxPlayers", room.getMaxPlayers(),
-                    "currentPlayers", playerObjects.size(),
-                    "smallBlind", room.getSmallBlind(),
-                    "bigBlind", room.getBigBlind(),
-                    "buyIn", room.getBuyIn(),
-                    "canStartGame", playerObjects.size() >= 2);
-
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(roomData);
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Failed to get room info: " + e.getMessage());
         }

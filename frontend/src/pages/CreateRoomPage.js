@@ -7,6 +7,7 @@ function CreateRoomPage() {
     const navigate = useNavigate()
     const [formData, setFormData] = useState({
         roomName: "",
+        playerName: "",
         maxPlayers: 6,
         smallBlind: 1,
         bigBlind: 2,
@@ -37,7 +38,7 @@ function CreateRoomPage() {
             // const response = await axios.post('http://localhost:8080/api/game/create', formData);
             // const roomId = response.data.roomId;
 
-            navigate(`/room/${roomId}`)
+            navigate(`/lobby/${roomId}`, { state: { playerName: formData.playerName, formData } })
         } catch (error) {
             console.error("Error creating room:", error)
             setError("Failed to create room. Please try again.")
@@ -57,6 +58,19 @@ function CreateRoomPage() {
 
             <div className="create-room-container">
                 <form onSubmit={handleSubmit} className="create-room-form">
+                    <div className="form-group">
+                        <label htmlFor="playerName">Your Name</label>
+                        <input
+                            type="text"
+                            id="playerName"
+                            name="playerName"
+                            value={formData.playerName}
+                            onChange={handleInputChange}
+                            required
+                            placeholder="Enter your name"
+                        />
+                    </div>
+
                     <div className="form-group">
                         <label htmlFor="roomName">Room Name</label>
                         <input

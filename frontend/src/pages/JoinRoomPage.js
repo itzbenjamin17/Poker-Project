@@ -6,7 +6,7 @@ import { useNavigate, Link } from "react-router-dom"
 function JoinRoomPage() {
     const navigate = useNavigate()
     const [formData, setFormData] = useState({
-        gameId: "",
+        roomName: "",
         playerName: "",
         password: ""
     })
@@ -27,12 +27,13 @@ function JoinRoomPage() {
         setError("")
 
         try {
-            const response = await fetch(`http://localhost:8080/api/game/${formData.gameId}/join`, {
+            const response = await fetch(`http://localhost:8080/api/game/room/join-by-name`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                    roomName: formData.roomName,
                     playerName: formData.playerName,
                     password: formData.password
                 })
@@ -43,8 +44,11 @@ function JoinRoomPage() {
                 throw new Error(errorData || 'Failed to join room')
             }
 
+            const result = await response.json()
+            const roomId = result.roomId
+
             // Navigate to lobby
-            navigate(`/lobby/${formData.gameId}`, {
+            navigate(`/lobby/${roomId}`, {
                 state: {
                     isHost: false,
                     playerName: formData.playerName
@@ -82,16 +86,15 @@ function JoinRoomPage() {
                     </div>
 
                     <div className="form-group">
-                        <label htmlFor="gameId">Room ID</label>
+                        <label htmlFor="roomName">Room Name</label>
                         <input
                             type="text"
-                            id="gameId"
-                            name="gameId"
-                            value={formData.gameId}
+                            id="roomName"
+                            name="roomName"
+                            value={formData.roomName}
                             onChange={handleInputChange}
                             required
-                            placeholder="Enter room ID"
-                            style={{ textTransform: 'uppercase' }}
+                            placeholder="Enter room name"
                         />
                     </div>
 

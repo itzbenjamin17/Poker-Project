@@ -7,10 +7,6 @@ import java.util.*;
 
 public class Game {
 
-    // Constants
-    private static final int SMALL_BLIND = 1;
-    private static final int BIG_BLIND = 2;
-
     private final String gameId;
     private final List<Player> players;
     private final List<Player> activePlayers;
@@ -25,8 +21,10 @@ public class Game {
     private GamePhase currentPhase;
     private boolean gameOver;
     private final HandEvaluatorService handEvaluator;
+    private final int smallBlind;
+    private final int bigBlind;
 
-    public Game(String gameId, List<Player> players, HandEvaluatorService handEvaluator) {
+    public Game(String gameId, List<Player> players, int smallBlind, int bigBlind, HandEvaluatorService handEvaluator) {
         if (gameId == null || gameId.trim().isEmpty()) {
             throw new IllegalArgumentException("Game ID cannot be null or empty");
         }
@@ -49,6 +47,8 @@ public class Game {
         this.currentHighestBet = 0;
         this.currentPhase = GamePhase.PRE_FLOP;
         this.gameOver = false;
+        this.smallBlind = smallBlind;
+        this.bigBlind = bigBlind;
         this.handEvaluator = handEvaluator;
     }
 
@@ -83,9 +83,9 @@ public class Game {
             Player smallBlindPlayer = activePlayers.get(smallBlindPosition);
             Player bigBlindPlayer = activePlayers.get(bigBlindPosition);
 
-            this.pot = smallBlindPlayer.doAction(PlayerAction.BET, SMALL_BLIND, this.pot);
-            this.pot = bigBlindPlayer.doAction(PlayerAction.BET, BIG_BLIND, this.pot);
-            currentHighestBet = BIG_BLIND;
+            this.pot = smallBlindPlayer.doAction(PlayerAction.BET, smallBlind, this.pot);
+            this.pot = bigBlindPlayer.doAction(PlayerAction.BET, bigBlind, this.pot);
+            currentHighestBet = bigBlind;
         }
     }
 
@@ -112,7 +112,8 @@ public class Game {
     }
 
     public boolean isBettingRoundComplete() {
-        // All active players have either folded, are all-in, or have matched the current highest bet.
+        // All active players have either folded, are all-in, or have matched the
+        // current highest bet.
         return activePlayers.stream()
                 .filter(p -> !p.getHasFolded() && !p.getIsAllIn())
                 .allMatch(p -> p.getCurrentBet() == currentHighestBet);
@@ -175,8 +176,10 @@ public class Game {
         for (int i = 1; i < players.size(); i++) {
             Player currentPlayer = players.get(i);
             if (currentPlayer.getHandRank() == bestPlayer.getHandRank()) {
-                if (!handEvaluator.isBetterHandOfSameRank(bestPlayer.getBestHand(), currentPlayer.getBestHand(), bestPlayer.getHandRank()) &&
-                        !handEvaluator.isBetterHandOfSameRank(currentPlayer.getBestHand(), bestPlayer.getBestHand(), bestPlayer.getHandRank())) {
+                if (!handEvaluator.isBetterHandOfSameRank(bestPlayer.getBestHand(), currentPlayer.getBestHand(),
+                        bestPlayer.getHandRank()) &&
+                        !handEvaluator.isBetterHandOfSameRank(currentPlayer.getBestHand(), bestPlayer.getBestHand(),
+                                bestPlayer.getHandRank())) {
                     winners.add(currentPlayer);
                 }
             } else {
@@ -230,18 +233,43 @@ public class Game {
     }
 
     // Getters and Setters
-    public String getGameId() { return gameId; }
-    public List<Player> getPlayers() { return players; }
-    public List<Player> getActivePlayers() { return activePlayers; }
+    public String getGameId() {
+        return gameId;
+    }
+
+    public List<Player> getPlayers() {
+        return players;
+    }
+
+    public List<Player> getActivePlayers() {
+        return activePlayers;
+    }
+
     public Player getCurrentPlayer() {
         return activePlayers.get(currentPlayerPosition);
     }
+
     public void nextPlayer() {
         currentPlayerPosition = (currentPlayerPosition + 1) % activePlayers.size();
     }
-    public List<Card> getCommunityCards() { return communityCards; }
-    public int getPot() { return pot; }
-    public GamePhase getCurrentPhase() { return currentPhase; }
-    public boolean isGameOver() { return gameOver; }
-    public int getCurrentHighestBet() { return currentHighestBet; }
+
+    public List<Card> getCommunityCards() {
+        return communityCards;
+    }
+
+    public int getPot() {
+        return pot;
+    }
+
+    public GamePhase getCurrentPhase() {
+        return currentPhase;
+    }
+
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
+    public int getCurrentHighestBet() {
+        return currentHighestBet;
+    }
 }

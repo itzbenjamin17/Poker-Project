@@ -25,27 +25,57 @@ function CreateRoomPage() {
         }))
     }
 
-    const handleSubmit = async (e) => {
-        e.preventDefault()
-        setLoading(true)
-        setError("")
+   const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError("")
 
-        try {
-            // For demo purposes, generate a random room ID
-            const roomId = Math.random().toString(36).substring(2, 8).toUpperCase()
+    try {
+        console.log('Creating room with data:', formData);
+        console.log('Player name being sent:', formData.playerName);
+        
+        // Create ROOM (not game)
+        const response = await fetch('http://localhost:8080/api/game/create-room', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
 
-            // In a real app, you would make this API call:
-            // const response = await axios.post('http://localhost:8080/api/game/create', formData);
-            // const roomId = response.data.roomId;
+        console.log('Create room response status:', response.status);
 
-            navigate(`/lobby/${roomId}`, { state: { playerName: formData.playerName, formData } })
-        } catch (error) {
-            console.error("Error creating room:", error)
-            setError("Failed to create room. Please try again.")
-        } finally {
-            setLoading(false)
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('Create room error:', errorData);
+            throw new Error(errorData || 'Failed to create room');
         }
+
+        const result = await response.json();
+        console.log('Create room result:', result);
+        const roomId = result.roomId;
+
+        console.log('Navigating to lobby with:', {
+            roomId,
+            playerName: formData.playerName,
+            formData
+        });
+
+        // Navigate to lobby with room data
+        navigate(`/lobby/${roomId}`, {
+            state: {
+                isHost: true,
+                playerName: formData.playerName,
+                formData: formData
+            }
+        });
+    } catch (err) {
+        console.error('Error creating room:', err);
+        setError(err.message);
+    } finally {
+        setLoading(false);
     }
+}
 
     return (
         <div className="create-room-page">

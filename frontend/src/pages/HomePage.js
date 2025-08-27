@@ -1,12 +1,22 @@
 "use client"
 
-import { useState } from "react"
-import { Link } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { Link, useLocation } from "react-router-dom"
 import axios from "axios"
 
 function HomePage() {
     const [message, setMessage] = useState("")
     const [error, setError] = useState("")
+    const location = useLocation()
+
+    // Check for messages from navigation state (like when redirected from closed room)
+    useEffect(() => {
+        if (location.state?.message) {
+            setMessage(location.state.message)
+            // Clear the message after a few seconds
+            setTimeout(() => setMessage(""), 5000)
+        }
+    }, [location.state])
 
     const handleTestBackend = () => {
         setMessage("")
@@ -36,11 +46,13 @@ function HomePage() {
                     <h1 className="game-title">Poker Pro</h1>
                     <p className="game-subtitle">Experience the thrill of Texas Hold'em with friends</p>
 
-                    <div className="action-buttons">
+                     <div className="action-buttons">
                         <Link to="/create-room" className="btn btn-primary">
                             Create Game Room
                         </Link>
-                        <button className="btn btn-secondary">Join Room</button>
+                        <Link to="/join-room" className="btn btn-secondary">
+                            Join Room
+                        </Link>
                     </div>
 
                     <div className="backend-test">

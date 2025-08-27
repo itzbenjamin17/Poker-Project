@@ -125,7 +125,7 @@ function LobbyPage() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    playerName: playerName
+                    playerName: playerName,
                 })
             });
 

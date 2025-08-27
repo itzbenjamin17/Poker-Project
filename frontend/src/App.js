@@ -14,7 +14,7 @@ function App() {
                 <Route path="/create-room" element={<CreateRoomPage />} />
                 <Route path="/join-room" element={<JoinRoomPage />} />
                 <Route path="/lobby/:id" element={<LobbyPage />} />
-                <Route path="/room/:id" element={<GameRoomPage />} />
+                <Route path="/game/:id" element={<GameRoomPage />} />
             </Routes>
         </div>
     )

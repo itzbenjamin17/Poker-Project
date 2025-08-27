@@ -1,46 +1,124 @@
 "use client"
 
-import { useState } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useState, useEffect, useCallback } from "react"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 
 function GameRoomPage() {
-    const { id } = useParams()
+    const { id: gameId } = useParams()
     const navigate = useNavigate()
-    const [gameState, setGameState] = useState({
-        roomName: `Room ${id}`,
-        pot: 450,
-        currentBet: 50,
-        maxPlayers: 6,
-        players: [
-            { id: 1, name: "You", chips: 2000, status: "active", cards: ["A♠", "K♥"], isCurrentPlayer: true },
-            { id: 2, name: "Alice", chips: 1800, status: "active", cards: ["?", "?"] },
-            { id: 3, name: "Bob", chips: 2200, status: "folded", cards: ["?", "?"] },
-            { id: 4, name: "Charlie", chips: 1500, status: "active", cards: ["?", "?"] },
-        ],
-        communityCards: ["Q♠", "10♦", "9♣"],
-        phase: "flop",
-    })
-    const [playerName, setPlayerName] = useState("Player")
-    const [isJoined, setIsJoined] = useState(true) // Set to true for demo
-    const [loading, setLoading] = useState(false)
+    const location = useLocation()
+    const { playerName } = location.state || {}
+    
+    // State for real game data (replace hardcoded demo data)
+    const [gameState, setGameState] = useState(null)
+    const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
+    const [currentPlayer, setCurrentPlayer] = useState(null)
+
+    // Fetch initial game state when component mounts
+    const fetchGameState = useCallback(async () => {
+        try {
+            setLoading(true)
+            setError("")
+            
+            const response = await fetch(`http://localhost:8080/api/game/${gameId}/state`)
+            
+            if (response.ok) {
+                const gameData = await response.json()
+                setGameState(gameData)
+                
+                // Find the current player
+                const player = gameData.players?.find(p => p.name === playerName)
+                setCurrentPlayer(player)
+            } else if (response.status === 404) {
+                setError("Game not found")
+                // Redirect back to home after a delay
+                setTimeout(() => navigate("/"), 3000)
+            } else {
+                const errorText = await response.text()
+                setError(`Failed to load game: ${errorText}`)
+            }
+        } catch (error) {
+            console.error('Error fetching game state:', error)
+            setError('Failed to connect to server')
+        } finally {
+            setLoading(false)
+        }
+    }, [gameId, playerName, navigate])
+
+    useEffect(() => {
+        // Fetch initial game state when component mounts
+        fetchGameState()
+        
+        // You might want to set up WebSocket for real-time game updates here
+        // Similar to how LobbyPage uses useRoomWebSocket
+    }, [fetchGameState])
 
     const handleAction = async (action, amount = 0) => {
-        console.log(`[v0] Player action: ${action}`, amount)
-        // In a real app, you would make an API call here
-        // try {
-        //   await axios.post(`http://localhost:8080/api/game/${id}/action`, {
-        //     action,
-        //     amount
-        //   });
-        //   fetchGameState();
-        // } catch (error) {
-        //   console.error('Error performing action:', error);
-        // }
+        console.log(`Player action: ${action}`, amount)
+        // Make actual API call to perform action
+        try {
+            const response = await fetch(`http://localhost:8080/api/game/${gameId}/action`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${currentPlayer?.secretToken}` // You'll need this from game state
+                },
+                body: JSON.stringify({
+                    action,
+                    amount
+                })
+            })
+            
+            if (response.ok) {
+                // Refresh game state after action
+                fetchGameState()
+            } else {
+                const errorText = await response.text()
+                setError(`Action failed: ${errorText}`)
+            }
+        } catch (error) {
+            console.error('Error performing action:', error)
+            setError('Failed to perform action')
+        }
     }
 
     const leaveRoom = () => {
         navigate("/")
+    }
+
+    // Show loading state
+    if (loading) {
+        return (
+            <div className="game-room loading">
+                <h2>Loading game...</h2>
+            </div>
+        )
+    }
+
+    // Show error state
+    if (error) {
+        return (
+            <div className="game-room error">
+                <h2>Error</h2>
+                <p>{error}</p>
+                <button onClick={() => navigate("/")} className="btn btn-primary">
+                    Back to Home
+                </button>
+            </div>
+        )
+    }
+
+    // Show message if no game state loaded
+    if (!gameState) {
+        return (
+            <div className="game-room">
+                <h2>Game not found</h2>
+                <button onClick={() => navigate("/")} className="btn btn-primary">
+                    Back to Home
+                </button>
+            </div>
+        )
     }
 
     const getPlayerPosition = (index, totalPlayers) => {

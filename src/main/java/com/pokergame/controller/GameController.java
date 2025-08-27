@@ -1,6 +1,7 @@
 package com.pokergame.controller;
 
 import com.pokergame.dto.CreateRoomRequest;
+import com.pokergame.dto.JoinRoomRequest;
 import com.pokergame.dto.PlayerActionRequest;
 import com.pokergame.model.Room;
 import com.pokergame.service.GameService;
@@ -74,21 +75,19 @@ public class GameController {
      * JOIN ROOM (not game) - BY ROOM ID (keep for backwards compatibility)
      */
     @PostMapping("/room/{roomId}/join")
-    public ResponseEntity<?> joinRoom(@PathVariable String roomId, @RequestBody Map<String, String> request) {
+    public ResponseEntity<?> joinRoom(@PathVariable String roomId, @RequestBody JoinRoomRequest joinRequest) {
         try {
-            String playerName = request.get("playerName");
-            String password = request.get("password");
-
-            if (playerName == null || playerName.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body("Player name is required");
+            // Validate that the roomId in the path matches the one in the request body
+            if (!roomId.equals(joinRequest.roomId())) {
+                return ResponseEntity.badRequest().body("Room ID in path does not match request body");
             }
 
-            gameService.joinRoom(roomId, playerName.trim(), password);
+            gameService.joinRoom(joinRequest);
 
             Map<String, Object> response = Map.of(
                     "message", "Successfully joined room",
                     "roomId", roomId,
-                    "playerName", playerName);
+                    "playerName", joinRequest.playerName());
 
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {

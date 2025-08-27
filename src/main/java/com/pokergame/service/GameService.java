@@ -1,7 +1,7 @@
 package com.pokergame.service;
 
-import com.pokergame.dto.CreateGameRequest;
 import com.pokergame.dto.CreateRoomRequest;
+import com.pokergame.dto.JoinRoomRequest;
 import com.pokergame.dto.PlayerActionRequest;
 import com.pokergame.model.Game;
 import com.pokergame.model.Player;
@@ -65,14 +65,14 @@ public class GameService {
     /**
      * Join a room (NOT a game)
      */
-    public void joinRoom(String roomId, String playerName, String password) {
-        Room room = rooms.get(roomId);
+    public void joinRoom(JoinRoomRequest joinRequest) {
+        Room room = rooms.get(joinRequest.roomId());
         if (room == null) {
             throw new IllegalArgumentException("Room not found");
         }
 
         // Check password if room is private
-        if (room.hasPassword() && !room.checkPassword(password)) {
+        if (room.hasPassword() && !room.checkPassword(joinRequest.password())) {
             throw new IllegalArgumentException("Invalid password");
         }
 
@@ -82,14 +82,14 @@ public class GameService {
         }
 
         // Check if player name already exists
-        if (room.hasPlayer(playerName)) {
+        if (room.hasPlayer(joinRequest.playerName())) {
             throw new IllegalArgumentException("Player name already taken");
         }
 
-        room.addPlayer(playerName);
+        room.addPlayer(joinRequest.playerName());
 
-        webSocketHandler.broadcastToRoom(roomId,
-                new WebSocketMessage("PLAYER_JOINED", roomId, getRoomData(roomId)));
+        webSocketHandler.broadcastToRoom(joinRequest.roomId(),
+                new WebSocketMessage("PLAYER_JOINED", joinRequest.roomId(), getRoomData(joinRequest.roomId())));
     }
 
     /**
@@ -204,7 +204,8 @@ public class GameService {
         }
 
         String roomId = room.getRoomId();
-        joinRoom(roomId, playerName, password);
+        JoinRoomRequest joinRequest = new JoinRoomRequest(roomId, playerName, password);
+        joinRoom(joinRequest);
         return roomId;
     }
 

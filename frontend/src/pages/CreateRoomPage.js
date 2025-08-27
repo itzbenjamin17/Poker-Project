@@ -8,9 +8,9 @@ function CreateRoomPage() {
     const [formData, setFormData] = useState({
         roomName: "",
         maxPlayers: 6,
-        smallBlind: 10,
-        bigBlind: 20,
-        buyIn: 1000,
+        smallBlind: 1,
+        bigBlind: 2,
+        buyIn: 100,
         password: "",
     })
     const [loading, setLoading] = useState(false)

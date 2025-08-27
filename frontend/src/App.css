@@ -459,29 +459,6 @@ body {
   gap: 0.5rem;
 }
 
-.seat-0 {
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.seat-1 {
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.seat-2 {
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.seat-3 {
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-}
 
 .player-info {
   background: rgba(0, 0, 0, 0.7);

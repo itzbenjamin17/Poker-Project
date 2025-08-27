@@ -15,7 +15,7 @@ public class PokerBackendApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        String url = "http://localhost:8080";
+        String url = "http://localhost:3000";
         if (Desktop.isDesktopSupported()) {
             Desktop desktop = Desktop.getDesktop();
             if (desktop.isSupported(Desktop.Action.BROWSE)) {

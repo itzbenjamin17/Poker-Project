@@ -43,6 +43,14 @@ function GameRoomPage() {
         navigate("/")
     }
 
+    const getPlayerPosition = (index, totalPlayers) => {
+        const angle = (index / totalPlayers) * 2 * Math.PI - Math.PI / 2; // Start at top
+        const radius = 35; // Percentage from center
+        const x = 50 + radius * Math.cos(angle);
+        const y = 50 + radius * Math.sin(angle);
+        return { left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' };
+    };
+
     return (
         <div className="game-room">
             <div className="game-header">
@@ -94,7 +102,8 @@ function GameRoomPage() {
                         {gameState.players.map((player, index) => (
                             <div
                                 key={player.id}
-                                className={`player-seat seat-${index} ${player.status} ${player.isCurrentPlayer ? "current-player" : ""}`}
+                                className={`player-seat ${player.status} ${player.isCurrentPlayer ? "current-player" : ""}`}
+                                style={getPlayerPosition(index, gameState.players.length)}
                             >
                                 <div className="player-info">
                                     <span className="player-name">{player.name}</span>

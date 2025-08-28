@@ -148,7 +148,11 @@ function LobbyPage() {
             }
 
             // Now navigate to the actual game
-            navigate(`/game/${roomId}`);
+            navigate(`/game/${roomId}`, { 
+                state: { 
+                    playerName: playerName 
+                } 
+            });
         } catch (error) {
             setError(error.message);
         } finally {

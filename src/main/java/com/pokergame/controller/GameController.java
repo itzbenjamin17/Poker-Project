@@ -200,11 +200,9 @@ public class GameController {
     @PostMapping("/{gameId}/action")
     public ResponseEntity<?> performAction(
             @PathVariable String gameId,
-            @RequestHeader("Authorization") String token,
             @RequestBody PlayerActionRequest actionRequest) {
         try {
-            String secretToken = token.startsWith("Bearer ") ? token.substring(7) : token;
-            gameService.processPlayerAction(gameId, secretToken, actionRequest);
+            gameService.processPlayerAction(gameId, actionRequest);
             return ResponseEntity.ok().build();
         } catch (SecurityException e) {
             return ResponseEntity.status(403).body(e.getMessage());
@@ -217,12 +215,16 @@ public class GameController {
      * GET GAME STATE (for GameRoomPage.js)
      */
     @GetMapping("/{gameId}/state")
-    public ResponseEntity<?> getGameState(@PathVariable String gameId) {
+    public ResponseEntity<?> getGameState(
+            @PathVariable String gameId,
+            @RequestParam(required = false) String playerName) {
         try {
             var game = gameService.getGame(gameId);
             if (game == null) {
                 return ResponseEntity.notFound().build();
             }
+
+            System.out.println("Getting game state for game: " + gameId + ", requesting player: " + playerName);
 
             // Create game state response for frontend
             Map<String, Object> gameState = new HashMap<>();
@@ -243,7 +245,18 @@ public class GameController {
                 playerData.put("chips", player.getChips());
                 playerData.put("status", player.getHasFolded() ? "folded" : "active");
                 playerData.put("isCurrentPlayer", game.getCurrentPlayer().equals(player));
-                playerData.put("cards", player.getHoleCards()); // This will show cards for debugging
+
+                // Only send cards to the player who owns them, or if no playerName specified
+                // (for debugging)
+                if (playerName == null || playerName.trim().isEmpty() || player.getName().equals(playerName)) {
+                    playerData.put("cards", player.getHoleCards());
+                    System.out.println("Sending cards for player: " + player.getName() + ", cards: "
+                            + player.getHoleCards().size());
+                } else {
+                    // Send empty cards for other players to maintain structure
+                    playerData.put("cards", new ArrayList<>());
+                    System.out.println("Hiding cards for player: " + player.getName());
+                }
                 playersList.add(playerData);
             }
             gameState.put("players", playersList);

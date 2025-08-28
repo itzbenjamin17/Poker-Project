@@ -162,9 +162,6 @@ public class GameService {
         Game game = new Game(roomId, players, room.getSmallBlind(), room.getBigBlind(), handEvaluator);
         activeGames.put(roomId, game);
 
-        // Start the first hand
-        // startNewHand(roomId);
-
         room.setGameStarted();
 
         // Broadcast to all players in the room that the game has started
@@ -175,7 +172,12 @@ public class GameService {
         webSocketHandler.broadcastToRoom(roomId,
                 new WebSocketMessage("GAME_STARTED", roomId, gameStartMessage));
 
+        // Start the first hand after a brief delay to allow players to navigate
         System.out.println("Game created and broadcasted: " + roomId);
+
+        // Initialize the game properly
+        startNewHand(roomId);
+
         return roomId;
     }
 
@@ -280,15 +282,20 @@ public class GameService {
         game.dealHoleCards();
         game.postBlinds();
 
-        conductBettingRound(gameId);
+        // Broadcast the initial game state to all players
+        broadcastGameState(gameId);
+
+        System.out.println("New hand started for game: " + gameId +
+                ", current player: " + game.getCurrentPlayer().getName());
     }
 
-    public void processPlayerAction(String gameId, String secretToken, PlayerActionRequest actionRequest) {
+    public void processPlayerAction(String gameId, PlayerActionRequest actionRequest) {
         Game game = getGame(gameId);
         Player currentPlayer = game.getCurrentPlayer();
 
-        if (!currentPlayer.getSecretToken().equals(secretToken)) {
-            throw new SecurityException("Invalid token. You are not authorized to perform this action.");
+        // Verify that the requesting player is the current player
+        if (!currentPlayer.getName().equals(actionRequest.playerName())) {
+            throw new SecurityException("It's not your turn. Current player is: " + currentPlayer.getName());
         }
 
         PlayerDecision decision = new PlayerDecision(
@@ -298,10 +305,15 @@ public class GameService {
 
         game.processPlayerDecision(currentPlayer, decision);
 
+        // Broadcast game state after player action
+        broadcastGameState(gameId);
+
         if (game.isBettingRoundComplete()) {
             advanceGame(gameId);
         } else {
             game.nextPlayer();
+            // Broadcast again after moving to next player
+            broadcastGameState(gameId);
         }
     }
 
@@ -324,7 +336,8 @@ public class GameService {
         Game game = getGame(gameId);
         if (game.isHandOver()) {
             List<Player> winners = game.conductShowdown();
-            // broadcast winners
+            // Broadcast showdown results
+            broadcastGameState(gameId);
             game.cleanupAfterHand();
             game.advancePositions();
             startNewHand(gameId);
@@ -334,29 +347,85 @@ public class GameService {
         switch (game.getCurrentPhase()) {
             case PRE_FLOP:
                 game.dealFlop();
-                conductBettingRound(gameId);
+                broadcastGameState(gameId);
                 break;
             case FLOP:
                 game.dealTurn();
-                conductBettingRound(gameId);
+                broadcastGameState(gameId);
                 break;
             case TURN:
                 game.dealRiver();
-                conductBettingRound(gameId);
+                broadcastGameState(gameId);
                 break;
             case RIVER:
-                game.conductShowdown();
                 List<Player> winners = game.conductShowdown();
-                // broadcast winners
+                broadcastGameState(gameId);
                 game.cleanupAfterHand();
                 game.advancePositions();
                 startNewHand(gameId);
+                break;
+            case SHOWDOWN:
+                // Handle showdown phase
                 break;
         }
     }
 
     public Game getGame(String gameId) {
         return activeGames.get(gameId);
+    }
+
+    /**
+     * Broadcast current game state to all players in the game
+     */
+    public void broadcastGameState(String gameId) {
+        Game game = getGame(gameId);
+        if (game == null) {
+            return;
+        }
+
+        // Create game state data for WebSocket broadcast
+        Map<String, Object> gameState = new HashMap<>();
+        gameState.put("gameId", gameId);
+        gameState.put("pot", game.getPot());
+        gameState.put("phase", game.getCurrentPhase().toString());
+        gameState.put("currentBet", game.getCurrentHighestBet());
+        gameState.put("communityCards", game.getCommunityCards());
+
+        // Add current player information
+        Player currentPlayer = game.getCurrentPlayer();
+        if (currentPlayer != null) {
+            gameState.put("currentPlayerName", currentPlayer.getName());
+            gameState.put("currentPlayerId", currentPlayer.getPlayerId());
+        }
+
+        // Convert players to frontend format (without showing other players' cards)
+        List<Map<String, Object>> playersList = new ArrayList<>();
+        for (var player : game.getPlayers()) {
+            Map<String, Object> playerData = new HashMap<>();
+            playerData.put("id", player.getPlayerId());
+            playerData.put("name", player.getName());
+            playerData.put("chips", player.getChips());
+            playerData.put("currentBet", player.getCurrentBet());
+            playerData.put("status", player.getHasFolded() ? "folded" : "active");
+            playerData.put("isCurrentPlayer", currentPlayer != null && currentPlayer.equals(player));
+            playerData.put("isAllIn", player.getIsAllIn());
+
+            // Only show cards to the player themselves (for security)
+            if (currentPlayer != null && currentPlayer.equals(player)) {
+                playerData.put("cards", player.getHoleCards());
+            } else {
+                playerData.put("cards", new ArrayList<>()); // Empty for other players
+            }
+            playersList.add(playerData);
+        }
+        gameState.put("players", playersList);
+
+        // Broadcast to all players
+        webSocketHandler.broadcastToRoom(gameId,
+                new WebSocketMessage("GAME_STATE_UPDATE", gameId, gameState));
+
+        System.out.println("Broadcasted game state for game: " + gameId + ", current player: " +
+                (currentPlayer != null ? currentPlayer.getName() : "none"));
     }
 
     private Player findPlayer(Game game, String playerId) {

@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useGameWebSocket } from "../hooks/useGameWebSocket"
 
 function GameRoomPage() {
+    // Helper function to format card objects for display
+    const formatCard = (card) => {
+        if (!card || typeof card !== 'object') return '?';
+        return `${card.rank || '?'} of ${card.suit || '?'}`;
+    };
     const { id: gameId } = useParams()
     const navigate = useNavigate()
     const location = useLocation()
@@ -15,21 +21,37 @@ function GameRoomPage() {
     const [error, setError] = useState("")
     const [currentPlayer, setCurrentPlayer] = useState(null)
 
+    // Handle WebSocket game state updates
+    const handleGameStateUpdate = useCallback((newGameState) => {
+        console.log('Received game state update:', newGameState);
+        setGameState(newGameState);
+        
+        // Find the current player data
+        const player = newGameState.players?.find(p => p.name === playerName);
+        setCurrentPlayer(player);
+        
+        setError(""); // Clear any errors
+        setLoading(false);
+    }, [playerName]);
+
+    // WebSocket connection for real-time game updates
+    useGameWebSocket(gameId, playerName, handleGameStateUpdate);
+
     // Fetch initial game state when component mounts
     const fetchGameState = useCallback(async () => {
         try {
             setLoading(true)
             setError("")
             
-            const response = await fetch(`http://localhost:8080/api/game/${gameId}/state`)
+            console.log('Fetching game state for player:', playerName);
+            const url = `http://localhost:8080/api/game/${gameId}/state${playerName ? `?playerName=${encodeURIComponent(playerName)}` : ''}`;
+            console.log('Request URL:', url);
+            const response = await fetch(url)
             
             if (response.ok) {
                 const gameData = await response.json()
-                setGameState(gameData)
-                
-                // Find the current player
-                const player = gameData.players?.find(p => p.name === playerName)
-                setCurrentPlayer(player)
+                console.log('Received game data:', gameData);
+                handleGameStateUpdate(gameData);
             } else if (response.status === 404) {
                 setError("Game not found")
                 // Redirect back to home after a delay
@@ -44,35 +66,38 @@ function GameRoomPage() {
         } finally {
             setLoading(false)
         }
-    }, [gameId, playerName, navigate])
+    }, [gameId, navigate, handleGameStateUpdate, playerName])
 
     useEffect(() => {
         // Fetch initial game state when component mounts
         fetchGameState()
-        
-        // You might want to set up WebSocket for real-time game updates here
-        // Similar to how LobbyPage uses useRoomWebSocket
     }, [fetchGameState])
 
     const handleAction = async (action, amount = 0) => {
         console.log(`Player action: ${action}`, amount)
+        
+        if (!currentPlayer) {
+            setError("Player not found")
+            return;
+        }
+        
         // Make actual API call to perform action
         try {
             const response = await fetch(`http://localhost:8080/api/game/${gameId}/action`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${currentPlayer?.secretToken}` // You'll need this from game state
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
+                    playerName: playerName,
                     action,
                     amount
                 })
             })
             
             if (response.ok) {
-                // Refresh game state after action
-                fetchGameState()
+                // Game state will be updated via WebSocket, no need to manually refresh
+                console.log(`Action ${action} submitted successfully`);
             } else {
                 const errorText = await response.text()
                 setError(`Action failed: ${errorText}`)
@@ -155,7 +180,7 @@ function GameRoomPage() {
                         <div className="cards-container">
                             {gameState.communityCards.map((card, index) => (
                                 <div key={index} className="card community-card">
-                                    {card}
+                                    {formatCard(card)}
                                 </div>
                             ))}
                             {/* Placeholder cards */}
@@ -189,11 +214,20 @@ function GameRoomPage() {
                                     <span className={`player-status ${player.status}`}>{player.status}</span>
                                 </div>
                                 <div className="player-cards">
-                                    {player.cards.map((card, cardIndex) => (
-                                        <div key={cardIndex} className={`card ${player.isCurrentPlayer ? "my-card" : "opponent-card"}`}>
-                                            {player.isCurrentPlayer ? card : "🂠"}
-                                        </div>
-                                    ))}
+                                    {player.cards && player.cards.length > 0 ? (
+                                        player.cards.map((card, cardIndex) => (
+                                            <div key={cardIndex} className={`card ${player.name === playerName ? "my-card" : "opponent-card"}`}>
+                                                {player.name === playerName ? formatCard(card) : "🂠"}
+                                            </div>
+                                        ))
+                                    ) : (
+                                        // Show placeholder cards for players without visible cards
+                                        Array.from({ length: 2 }).map((_, cardIndex) => (
+                                            <div key={cardIndex} className="card opponent-card">
+                                                🂠
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -207,39 +241,52 @@ function GameRoomPage() {
                     <h3>Your Hand</h3>
                     <div className="hand-cards">
                         {gameState.players
-                            .find((p) => p.isCurrentPlayer)
-                            ?.cards.map((card, index) => (
+                            .find((p) => p.name === playerName)
+                            ?.cards?.map((card, index) => (
                                 <div key={index} className="card my-card-large">
-                                    {card}
+                                    {formatCard(card)}
                                 </div>
-                            ))}
+                            )) || (
+                            // Show placeholder if no cards found
+                            <div className="no-cards">No cards dealt yet</div>
+                        )}
                     </div>
                 </div>
 
-                <div className="betting-controls">
-                    <div className="action-buttons">
-                        <button onClick={() => handleAction("fold")} className="btn btn-danger action-btn">
-                            Fold
-                        </button>
-                        <button onClick={() => handleAction("check")} className="btn btn-secondary action-btn">
-                            Check
-                        </button>
-                        <button onClick={() => handleAction("call")} className="btn btn-primary action-btn">
-                            Call ${gameState.currentBet}
-                        </button>
-                        <button
-                            onClick={() => handleAction("raise", gameState.currentBet * 2)}
-                            className="btn btn-success action-btn"
-                        >
-                            Raise
-                        </button>
-                    </div>
+                {/* Only show betting controls if it's the current player's turn */}
+                {gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
+                    <div className="betting-controls">
+                        <div className="action-buttons">
+                            <button onClick={() => handleAction("FOLD")} className="btn btn-danger action-btn">
+                                Fold
+                            </button>
+                            <button onClick={() => handleAction("CHECK")} className="btn btn-secondary action-btn">
+                                Check
+                            </button>
+                            <button onClick={() => handleAction("CALL")} className="btn btn-primary action-btn">
+                                Call ${gameState.currentBet}
+                            </button>
+                            <button
+                                onClick={() => handleAction("RAISE", gameState.currentBet * 2)}
+                                className="btn btn-success action-btn"
+                            >
+                                Raise
+                            </button>
+                        </div>
 
-                    <div className="bet-amount">
-                        <label>Bet Amount:</label>
-                        <input type="number" min={gameState.currentBet} defaultValue={gameState.currentBet * 2} />
+                        <div className="bet-amount">
+                            <label>Bet Amount:</label>
+                            <input type="number" min={gameState.currentBet} defaultValue={gameState.currentBet * 2} />
+                        </div>
                     </div>
-                </div>
+                )}
+
+                {/* Show waiting message if it's not the player's turn */}
+                {!gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
+                    <div className="waiting-message">
+                        <p>Waiting for {gameState.players.find(p => p.isCurrentPlayer)?.name || 'other player'} to act...</p>
+                    </div>
+                )}
             </div>
         </div>
     )

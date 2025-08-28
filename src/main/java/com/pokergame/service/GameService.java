@@ -401,7 +401,7 @@ public class GameService {
             System.out.println("Waiting 5 seconds before starting new hand...");
             new Thread(() -> {
                 try {
-                    Thread.sleep(10000); // 10 second delay
+                    Thread.sleep(15000); // 15 second delay
                     System.out.println("Proceeding to cleanup and new hand...");
                     game.cleanupAfterHand();
                     game.advancePositions();
@@ -439,10 +439,10 @@ public class GameService {
                 broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
                 // Add delay before starting new hand to allow frontend to display results
-                System.out.println("Waiting 5 seconds before starting new hand...");
+                System.out.println("Waiting 15 seconds before starting new hand...");
                 new Thread(() -> {
                     try {
-                        Thread.sleep(5000); // 5 second delay
+                        Thread.sleep(15000); // 15 second delay
                         System.out.println("Proceeding to cleanup and new hand...");
                         game.cleanupAfterHand();
                         game.advancePositions();
@@ -580,6 +580,13 @@ public class GameService {
             playerData.put("isAllIn", player.getIsAllIn());
             playerData.put("hasFolded", player.getHasFolded());
             playerData.put("isWinner", winnerNames.contains(player.getName()));
+
+            // Add winnings information only for winners
+            if (winnerNames.contains(player.getName())) {
+                playerData.put("chipsWon", winningsPerPlayer);
+            } else {
+                playerData.put("chipsWon", 0);
+            }
 
             // Add hand rank and best hand during showdown
             if (!player.getHasFolded()) {

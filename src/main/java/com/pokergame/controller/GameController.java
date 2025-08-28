@@ -122,15 +122,18 @@ public class GameController {
 
             // Verify player is the host
             if (!gameService.isRoomHost(roomId, playerName)) {
+                System.out.println("Not the host");
                 return ResponseEntity.status(403).body("Only the room host can start the game");
             }
-
+            System.out.println("Host verified");
             String gameId = gameService.createGameFromRoom(roomId);
+            System.out.println("Game ID: " + gameId);
 
             Map<String, Object> response = Map.of(
                     "gameId", gameId,
                     "message", "Game started successfully");
 
+            System.out.println("Response: " + response);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());

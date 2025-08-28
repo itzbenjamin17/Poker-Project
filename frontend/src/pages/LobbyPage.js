@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom"
 import { useRoomWebSocket } from "../hooks/useRoomWebSocket"
+import axios from "axios";
 
 function LobbyPage() {
     const navigate = useNavigate()
@@ -128,9 +129,11 @@ function LobbyPage() {
                     playerName: playerName,
                 })
             });
-
+            console.log('Response status:', response.status);
+            console.log('Response data:', await response.json());
             if (!response.ok) {
                 const errorData = await response.text();
+                console.error('Failed to start game:', errorData);
                 throw new Error(errorData || 'Failed to start game');
             }
 
@@ -172,6 +175,9 @@ function LobbyPage() {
         players.find(p => p.name === playerName)?.isHost || false : 
         false;
     const canStartGame = isHost && players.length >= 2
+    console.log({ isHost, playerName, hostName: roomInfo?.hostName, players });
+    console.log({ canStartGame, loading, playerCount: players.length });
+
 
     return (
         <div className="lobby-page">

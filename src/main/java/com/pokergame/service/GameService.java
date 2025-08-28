@@ -99,6 +99,10 @@ public class GameService {
         return rooms.get(roomId);
     }
 
+    public List<Room> getRooms() {
+        return new ArrayList<>(rooms.values());
+    }
+
     /**
      * Get formatted room data for API responses and WebSocket broadcasts
      */
@@ -159,12 +163,10 @@ public class GameService {
         activeGames.put(roomId, game);
 
         // Start the first hand
-        startNewHand(roomId);
+        //startNewHand(roomId);
 
-        // Remove room since game has started
-        rooms.remove(roomId);
-        roomHosts.remove(roomId);
-
+        room.setGameStarted();
+        System.out.println("Game created: " + roomId);
         return roomId;
     }
 

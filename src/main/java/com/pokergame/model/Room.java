@@ -15,6 +15,7 @@ public class Room {
     private int buyIn;
     private String password;
     private LocalDateTime createdAt;
+    private boolean gameStarted = false;
 
     public Room(String roomId, String roomName, String hostName, int maxPlayers,
             int smallBlind, int bigBlind, int buyIn, String password) {
@@ -36,6 +37,10 @@ public class Room {
         }
     }
 
+    public void setGameStarted() {
+        gameStarted = true;
+    }
+
     public void removePlayer(String playerName) {
         players.remove(playerName);
     }
@@ -52,6 +57,10 @@ public class Room {
         if (!hasPassword())
             return true;
         return password.equals(inputPassword);
+    }
+    @Override
+    public String toString(){
+        return roomName + " (" + roomId + ")" + " by " + hostName + " with " + players.size() + " players";
     }
 
     // Getters and setters

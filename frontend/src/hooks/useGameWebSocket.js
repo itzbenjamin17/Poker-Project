@@ -8,9 +8,26 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
         if (!gameId || !playerName) return;
 
         const handleWebSocketMessage = (message) => {
+            console.log('=== WebSocket message received ===');
+            console.log('Type:', message.type);
+            console.log('Full message:', message);
+            
             switch (message.type) {
                 case 'GAME_STATE_UPDATE':
                     console.log('Game state update received:', message.data);
+                    if (message.data.phase === 'SHOWDOWN') {
+                        console.log('GAME_STATE_UPDATE with SHOWDOWN phase!');
+                        console.log('Winners in GAME_STATE_UPDATE:', message.data.winners);
+                    }
+                    if (onGameStateUpdate) {
+                        onGameStateUpdate(message.data);
+                    }
+                    break;
+                case 'SHOWDOWN_RESULTS':
+                    console.log('=== SHOWDOWN_RESULTS message received ===');
+                    console.log('Showdown results received:', message.data);
+                    console.log('Winners in SHOWDOWN_RESULTS:', message.data.winners);
+                    console.log('Players in SHOWDOWN_RESULTS:', message.data.players);
                     if (onGameStateUpdate) {
                         onGameStateUpdate(message.data);
                     }

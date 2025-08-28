@@ -25,6 +25,23 @@ function GameRoomPage() {
     // Handle WebSocket game state updates
     const handleGameStateUpdate = useCallback((newGameState) => {
         console.log('Received game state update:', newGameState);
+        
+        // Extra debugging for showdown
+        if (newGameState.phase === 'SHOWDOWN') {
+            console.log('SHOWDOWN detected!');
+            console.log('Winners:', newGameState.winners);
+            console.log('Winner count:', newGameState.winnerCount);
+            console.log('Players:', newGameState.players);
+            console.log('Any winners in players?', newGameState.players?.some(p => p.isWinner));
+            
+            // Check if any player has isWinner flag
+            if (newGameState.players) {
+                newGameState.players.forEach(player => {
+                    console.log(`Player ${player.name}: isWinner=${player.isWinner}, handRank=${player.handRank}`);
+                });
+            }
+        }
+        
         setGameState(newGameState);
         
         // Find the current player data
@@ -336,26 +353,62 @@ function GameRoomPage() {
                 {/* Show all players' cards during showdown */}
                 {gameState.phase === 'SHOWDOWN' && (
                     <div className="showdown-section">
-                        <h3>Showdown - All Player Cards</h3>
+                        <h3>Showdown - Best Hands</h3>
+                        
+                        {/* Show debug info */}
+                        <div style={{fontSize: '12px', color: '#ccc', marginBottom: '10px'}}>
+                            Debug: Winners array: {JSON.stringify(gameState.winners || [])} | 
+                            Players with isWinner: {gameState.players?.filter(p => p.isWinner).map(p => p.name).join(', ') || 'none'} |
+                            Winnings per player: {gameState.winningsPerPlayer || 'not available'}
+                        </div>
+                        
+                        {/* Show winners if available - check both winners array and isWinner flags */}
+                        {((gameState.winners && gameState.winners.length > 0) || 
+                          (gameState.players && gameState.players.some(p => p.isWinner))) && (
+                            <div className="winners-announcement">
+                                <h4 className="winners-title">
+                                    🏆 Winner{(gameState.winners?.length > 1 || gameState.players?.filter(p => p.isWinner).length > 1) ? 's' : ''}: 
+                                    {gameState.winners?.join(', ') || gameState.players?.filter(p => p.isWinner).map(p => p.name).join(', ')}
+                                </h4>
+                                <p>Pot won: ${gameState.winningsPerPlayer || Math.floor(gameState.pot / (gameState.winners?.length || gameState.players?.filter(p => p.isWinner).length || 1))} each</p>
+                            </div>
+                        )}
+                        
                         <div className="showdown-players">
                             {gameState.players.filter(p => !p.hasFolded).map((player, index) => (
-                                <div key={index} className="showdown-player">
-                                    <h4>{player.name} - ${player.chips} chips</h4>
+                                <div key={index} className={`showdown-player ${player.isWinner ? 'winner' : ''}`}>
+                                    <h4>
+                                        {player.name} - ${player.chips} chips
+                                        {player.isWinner && ' 🏆'}
+                                    </h4>
                                     <div className="player-hand">
-                                        {player.cards && player.cards.map((card, cardIndex) => (
-                                            <div key={cardIndex} className="card showdown-card">
-                                                {formatCard(card)}
-                                            </div>
-                                        ))}
+                                        <p className="hand-label">Best Hand:</p>
+                                        {player.cards && player.cards.length > 0 ? 
+                                            player.cards.map((card, cardIndex) => (
+                                                <div key={cardIndex} className="card showdown-card">
+                                                    {formatCard(card)}
+                                                </div>
+                                            )) : 
+                                            <div style={{color: '#ccc', fontSize: '14px'}}>No cards available</div>
+                                        }
                                     </div>
                                     {player.handRank && (
                                         <p className="hand-rank">Hand: {player.handRank}</p>
                                     )}
+                                    <div style={{fontSize: '12px', color: '#999'}}>
+                                        Debug: isWinner={String(player.isWinner)}, cards count={player.cards?.length || 0}
+                                    </div>
                                 </div>
                             ))}
                         </div>
+                        
                         <div className="showdown-message">
-                            <p>Determining winner... New hand will start shortly.</p>
+                            {((gameState.winners && gameState.winners.length > 0) || 
+                              (gameState.players && gameState.players.some(p => p.isWinner))) ? (
+                                <p>🎉 Hand complete! New hand will start shortly...</p>
+                            ) : (
+                                <p>Determining winner... New hand will start shortly.</p>
+                            )}
                         </div>
                     </div>
                 )}

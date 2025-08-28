@@ -3,6 +3,7 @@ package com.pokergame.service;
 import com.pokergame.dto.CreateRoomRequest;
 import com.pokergame.dto.JoinRoomRequest;
 import com.pokergame.dto.PlayerActionRequest;
+import com.pokergame.model.Card;
 import com.pokergame.model.Game;
 import com.pokergame.model.GamePhase;
 import com.pokergame.model.Player;
@@ -389,17 +390,27 @@ public class GameService {
 
         if (game.isHandOver()) {
             System.out.println("Hand is over, conducting showdown...");
+            int potBeforeDistribution = game.getPot(); // Capture pot before showdown
             List<Player> winners = game.conductShowdown();
             System.out.println("Showdown complete. Winners: " + winners.stream().map(Player::getName).toList());
-            // Broadcast showdown results
-            broadcastGameState(gameId);
+            // Broadcast showdown results with winner information and actual winnings
+            int winningsPerPlayer = potBeforeDistribution / winners.size();
+            broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
-            // Proceed immediately to next hand without delay
-            System.out.println("Proceeding to cleanup and new hand...");
-            game.cleanupAfterHand();
-            game.advancePositions();
-            System.out.println("Starting new hand...");
-            startNewHand(gameId);
+            // Add delay before starting new hand to allow frontend to display results
+            System.out.println("Waiting 5 seconds before starting new hand...");
+            new Thread(() -> {
+                try {
+                    Thread.sleep(10000); // 10 second delay
+                    System.out.println("Proceeding to cleanup and new hand...");
+                    game.cleanupAfterHand();
+                    game.advancePositions();
+                    System.out.println("Starting new hand...");
+                    startNewHand(gameId);
+                } catch (InterruptedException e) {
+                    System.err.println("Interrupted while waiting to start new hand: " + e.getMessage());
+                }
+            }).start();
             return;
         }
         switch (game.getCurrentPhase()) {
@@ -420,16 +431,27 @@ public class GameService {
                 break;
             case RIVER:
                 System.out.println("RIVER betting complete, conducting showdown...");
+                int potBeforeDistribution = game.getPot(); // Capture pot before showdown
                 List<Player> winners = game.conductShowdown();
                 System.out.println("Showdown complete. Winners: " + winners.stream().map(Player::getName).toList());
-                broadcastGameState(gameId);
+                // Broadcast showdown results with winner information and actual winnings
+                int winningsPerPlayer = potBeforeDistribution / winners.size();
+                broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
-                // Proceed immediately to next hand without delay
-                System.out.println("Proceeding to cleanup and new hand...");
-                game.cleanupAfterHand();
-                game.advancePositions();
-                System.out.println("Starting new hand after river...");
-                startNewHand(gameId);
+                // Add delay before starting new hand to allow frontend to display results
+                System.out.println("Waiting 5 seconds before starting new hand...");
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(5000); // 5 second delay
+                        System.out.println("Proceeding to cleanup and new hand...");
+                        game.cleanupAfterHand();
+                        game.advancePositions();
+                        System.out.println("Starting new hand after river...");
+                        startNewHand(gameId);
+                    } catch (InterruptedException e) {
+                        System.err.println("Interrupted while waiting to start new hand: " + e.getMessage());
+                    }
+                }).start();
                 break;
             case SHOWDOWN:
                 System.out.println("Already in showdown phase");
@@ -486,9 +508,12 @@ public class GameService {
 
             // Show cards based on game phase
             if (game.getCurrentPhase() == GamePhase.SHOWDOWN) {
-                // During showdown, show all non-folded players' cards to everyone
+                // During showdown, show all non-folded players' best hands to everyone
                 if (!player.getHasFolded()) {
-                    playerData.put("cards", player.getHoleCards());
+                    List<Card> bestHand = player.getBestHand();
+                    playerData.put("cards", bestHand != null ? bestHand : new ArrayList<>());
+                    System.out.println("Sending best hand for " + player.getName() + ": " +
+                            (bestHand != null ? bestHand.size() + " cards" : "null"));
                 } else {
                     playerData.put("cards", new ArrayList<>());
                 }
@@ -510,6 +535,77 @@ public class GameService {
 
         System.out.println("Broadcasted game state for game: " + gameId + ", current player: " +
                 (currentPlayer != null ? currentPlayer.getName() : "none"));
+    }
+
+    /**
+     * Broadcast showdown results with winner information to all players
+     */
+    public void broadcastShowdownResults(String gameId, List<Player> winners, int winningsPerPlayer) {
+        Game game = getGame(gameId);
+        if (game == null) {
+            return;
+        }
+
+        // Create showdown-specific game state data
+        Map<String, Object> gameState = new HashMap<>();
+        gameState.put("gameId", gameId);
+        gameState.put("pot", game.getPot());
+        gameState.put("phase", game.getCurrentPhase().toString());
+        gameState.put("currentBet", game.getCurrentHighestBet());
+        gameState.put("communityCards", game.getCommunityCards());
+
+        // Add winner information with actual winnings
+        List<String> winnerNames = winners.stream().map(Player::getName).toList();
+        gameState.put("winners", winnerNames);
+        gameState.put("winnerCount", winners.size());
+        gameState.put("winningsPerPlayer", winningsPerPlayer); // Add actual winnings amount
+
+        // Add current player information
+        Player currentPlayer = game.getCurrentPlayer();
+        if (currentPlayer != null) {
+            gameState.put("currentPlayerName", currentPlayer.getName());
+            gameState.put("currentPlayerId", currentPlayer.getPlayerId());
+        }
+
+        // Convert players to frontend format for showdown
+        List<Map<String, Object>> playersList = new ArrayList<>();
+        for (var player : game.getPlayers()) {
+            Map<String, Object> playerData = new HashMap<>();
+            playerData.put("id", player.getPlayerId());
+            playerData.put("name", player.getName());
+            playerData.put("chips", player.getChips());
+            playerData.put("currentBet", player.getCurrentBet());
+            playerData.put("status", player.getHasFolded() ? "folded" : "active");
+            playerData.put("isCurrentPlayer", currentPlayer != null && currentPlayer.equals(player));
+            playerData.put("isAllIn", player.getIsAllIn());
+            playerData.put("hasFolded", player.getHasFolded());
+            playerData.put("isWinner", winnerNames.contains(player.getName()));
+
+            // Add hand rank and best hand during showdown
+            if (!player.getHasFolded()) {
+                playerData.put("handRank", player.getHandRank() != null ? player.getHandRank().toString() : "UNKNOWN");
+                // Send best hand instead of hole cards for showdown
+                List<Card> bestHand = player.getBestHand();
+                playerData.put("cards", bestHand != null ? bestHand : new ArrayList<>());
+                playerData.put("bestHand", bestHand != null ? bestHand : new ArrayList<>());
+                System.out.println("SHOWDOWN RESULTS: Sending best hand for " + player.getName() + ": " +
+                        (bestHand != null ? bestHand.size() + " cards - " + bestHand : "null"));
+            } else {
+                playerData.put("cards", new ArrayList<>());
+            }
+
+            playersList.add(playerData);
+        }
+        gameState.put("players", playersList);
+
+        // Broadcast showdown results to all players
+        webSocketHandler.broadcastToRoom(gameId,
+                new WebSocketMessage("SHOWDOWN_RESULTS", gameId, gameState));
+
+        System.out.println("Broadcasted showdown results for game: " + gameId + ", winners: " + winnerNames);
+        System.out.println("Showdown gameState contains winners: " + gameState.get("winners"));
+        System.out.println("Showdown gameState contains winnerCount: " + gameState.get("winnerCount"));
+        System.out.println("Actual winnings per player: " + winningsPerPlayer);
     }
 
     private Player findPlayer(Game game, String playerId) {

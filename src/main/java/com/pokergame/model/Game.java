@@ -256,16 +256,20 @@ public class Game {
     }
 
     private List<Player> determineWinners(List<Player> players) {
-        players.sort(Comparator.comparing(Player::getHandRank).reversed());
-        if (players.isEmpty()) {
+        // Create a mutable copy of the list for sorting
+        List<Player> sortablePlayers = new ArrayList<>(players);
+        sortablePlayers.sort(Comparator.comparing(Player::getHandRank).reversed());
+
+        if (sortablePlayers.isEmpty()) {
             return new ArrayList<>();
         }
-        Player bestPlayer = players.getFirst();
+
+        Player bestPlayer = sortablePlayers.getFirst();
         List<Player> winners = new ArrayList<>();
         winners.add(bestPlayer);
 
-        for (int i = 1; i < players.size(); i++) {
-            Player currentPlayer = players.get(i);
+        for (int i = 1; i < sortablePlayers.size(); i++) {
+            Player currentPlayer = sortablePlayers.get(i);
             if (currentPlayer.getHandRank() == bestPlayer.getHandRank()) {
                 if (!handEvaluator.isBetterHandOfSameRank(bestPlayer.getBestHand(), currentPlayer.getBestHand(),
                         bestPlayer.getHandRank()) &&

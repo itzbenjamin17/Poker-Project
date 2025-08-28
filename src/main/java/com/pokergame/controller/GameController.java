@@ -3,7 +3,6 @@ package com.pokergame.controller;
 import com.pokergame.dto.CreateRoomRequest;
 import com.pokergame.dto.JoinRoomRequest;
 import com.pokergame.dto.PlayerActionRequest;
-import com.pokergame.model.Room;
 import com.pokergame.service.GameService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;

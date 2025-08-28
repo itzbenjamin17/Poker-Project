@@ -871,3 +871,75 @@ body {
     flex-direction: column;
   }
 }
+
+/* Showdown and Winner Styles */
+.winners-announcement {
+  background: linear-gradient(135deg, #d4af37, #b8941f);
+  padding: 1rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+}
+
+.winners-title {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: white;
+}
+
+.showdown-player.winner {
+  border: 3px solid #d4af37;
+  background: rgba(212, 175, 55, 0.1);
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+}
+
+.showdown-player.winner h4 {
+  color: #d4af37;
+}
+
+.showdown-section {
+  margin: 2rem 0;
+}
+
+.showdown-players {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.showdown-player {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1rem;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.showdown-card {
+  background: white;
+  color: #333;
+  padding: 0.5rem;
+  margin: 0.2rem;
+  border-radius: 5px;
+  font-weight: bold;
+  min-width: 80px;
+  text-align: center;
+}
+
+.showdown-message {
+  text-align: center;
+  font-size: 1.2rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.hand-label {
+  font-size: 0.9rem;
+  color: #ccc;
+  margin-bottom: 0.5rem;
+  font-style: italic;
+}

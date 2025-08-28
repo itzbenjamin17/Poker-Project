@@ -12,7 +12,7 @@ import java.util.Map;
  *
  */
 public class Deck {
-    private List<Card> cards;
+    private final List<Card> cards;
 
     /**
      * Creates a new shuffled deck containing all 52 standard playing cards.
@@ -47,13 +47,6 @@ public class Deck {
     }
 
     /**
-     * Returns the number of cards remaining in the deck.
-     *
-     * @return the count of undealt cards
-     */
-    public int getNumberOfCards() {return cards.size();}
-
-    /**
      * Deals the specified number of cards from the top of the deck into the given list.
      *
      * @param cards the list to receive the dealt cards
@@ -65,11 +58,5 @@ public class Deck {
             cards.add(this.cards.removeFirst());
         }
     }
-
-    /**
-     * Removes the specified card from the deck if present.
-     *
-     * @param card the card to remove from the deck
-     */
-    public void removeCard(Card card) {this.cards.remove(card);}
+    
 }

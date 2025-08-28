@@ -5,17 +5,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Room {
-    private String roomId;
-    private String roomName;
-    private String hostName;
-    private List<String> players;
-    private int maxPlayers;
-    private int smallBlind;
-    private int bigBlind;
-    private int buyIn;
-    private String password;
-    private LocalDateTime createdAt;
-    private boolean gameStarted = false;
+    private final String roomId;
+    private final String roomName;
+    private final String hostName;
+    private final List<String> players;
+    private final int maxPlayers;
+    private final int smallBlind;
+    private final int bigBlind;
+    private final int buyIn;
+    private final String password;
+    private final LocalDateTime createdAt;
 
     public Room(String roomId, String roomName, String hostName, int maxPlayers,
             int smallBlind, int bigBlind, int buyIn, String password) {
@@ -35,10 +34,6 @@ public class Room {
         if (!players.contains(playerName)) {
             players.add(playerName);
         }
-    }
-
-    public void setGameStarted() {
-        gameStarted = true;
     }
 
     public void removePlayer(String playerName) {

@@ -101,7 +101,6 @@ function LobbyPage() {
                             message: "The room has been closed by the host." 
                         } 
                     });
-                    return; // Exit early to prevent setting error state
                 } else {
                     setError(`Failed to load room info: ${response.status} - ${errorText}`);
                 }

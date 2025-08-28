@@ -181,10 +181,8 @@ public class Game {
         System.out.println("  All bets equal (" + currentHighestBet + "): " + allBetsEqual);
         System.out.println("  All players have acted: " + allPlayersHaveActed);
 
-        playersWhoShouldAct.forEach(p -> {
-            System.out.println("    " + p.getName() + ": bet=" + p.getCurrentBet() +
-                    ", acted=" + playersWhoActedThisRound.contains(p.getPlayerId()));
-        });
+        playersWhoShouldAct.forEach(p -> System.out.println("    " + p.getName() + ": bet=" + p.getCurrentBet() +
+                ", acted=" + playersWhoActedThisRound.contains(p.getPlayerId())));
 
         boolean result = allBetsEqual && allPlayersHaveActed;
         System.out.println("  Result: " + (result ? "Complete" : "Not complete"));
@@ -303,8 +301,7 @@ public class Game {
             System.out.println("  " + winner.getName() + ": " + chipsBefore + " -> " + winner.getChips() + " chips");
         }
 
-        int remainder = pot % winners.size();
-        pot = remainder; // Any remainder stays for the next hand
+        pot = pot % winners.size(); // Any remainder stays for the next hand
 
         System.out.println("Pot remainder for next hand: " + pot);
         System.out.println("=== POT DISTRIBUTION COMPLETE ===");

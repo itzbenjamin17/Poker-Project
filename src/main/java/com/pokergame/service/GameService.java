@@ -25,8 +25,8 @@ public class GameService {
     @Autowired
     private HandEvaluatorService handEvaluator;
     private final Map<String, Game> activeGames = new HashMap<>();
-    private Map<String, Room> rooms = new ConcurrentHashMap<>();
-    private Map<String, String> roomHosts = new ConcurrentHashMap<>();
+    private final Map<String, Room> rooms = new ConcurrentHashMap<>();
+    private final Map<String, String> roomHosts = new ConcurrentHashMap<>();
     @Autowired
     private RoomWebSocketHandler webSocketHandler;
 
@@ -94,12 +94,6 @@ public class GameService {
                 new WebSocketMessage("PLAYER_JOINED", joinRequest.roomId(), getRoomData(joinRequest.roomId())));
     }
 
-    /**
-     * Get room information
-     */
-    public Room getRoom(String roomId) {
-        return rooms.get(roomId);
-    }
 
     public List<Room> getRooms() {
         return new ArrayList<>(rooms.values());
@@ -163,8 +157,6 @@ public class GameService {
 
         Game game = new Game(roomId, players, room.getSmallBlind(), room.getBigBlind(), handEvaluator);
         activeGames.put(roomId, game);
-
-        room.setGameStarted();
 
         // Broadcast to all players in the room that the game has started
         Map<String, Object> gameStartMessage = new HashMap<>();
@@ -369,20 +361,6 @@ public class GameService {
         System.out.println("=== PLAYER ACTION COMPLETE ===");
     }
 
-    private void conductBettingRound(String gameId) {
-        Game game = getGame(gameId);
-
-        while (!game.isHandOver() && !game.isBettingRoundComplete()) {
-            Player currentPlayer = game.getCurrentPlayer();
-            if (currentPlayer.getHasFolded() || currentPlayer.getIsAllIn()) {
-                game.nextPlayer();
-                continue;
-            }
-            game.nextPlayer();
-        }
-
-        advanceGame(gameId);
-    }
 
     private void advanceGame(String gameId) {
         Game game = getGame(gameId);
@@ -615,10 +593,4 @@ public class GameService {
         System.out.println("Actual winnings per player: " + winningsPerPlayer);
     }
 
-    private Player findPlayer(Game game, String playerId) {
-        return game.getPlayers().stream()
-                .filter(p -> p.getPlayerId().equals(playerId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Player not found"));
-    }
 }

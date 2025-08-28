@@ -514,6 +514,110 @@ body {
   background: rgba(212, 175, 55, 0.2);
 }
 
+/* Winner player styling */
+.winner-player {
+  position: relative;
+  z-index: 10;
+}
+
+.winner-player .player-info {
+  border: 3px solid #ffd700;
+  background: rgba(255, 215, 0, 0.3);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+  animation: winner-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes winner-glow {
+  from {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+  }
+  to {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.9);
+  }
+}
+
+.winner-overlay {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  color: #333;
+  padding: 8px 12px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+  min-width: 120px;
+  z-index: 20;
+  animation: winner-bounce 0.6s ease-out;
+}
+
+@keyframes winner-bounce {
+  0% {
+    transform: translateX(-50%) translateY(20px) scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: translateX(-50%) translateY(-5px) scale(1.1);
+  }
+  100% {
+    transform: translateX(-50%) translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.winner-badge {
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.winner-hand {
+  font-size: 10px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.winner-amount {
+  font-size: 11px;
+  font-weight: bold;
+  color: #228b22;
+}
+
+/* Winner announcement at top */
+.winner-announcement {
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  color: #333;
+  padding: 12px 20px;
+  margin: 10px 20px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+  animation: slide-down 0.5s ease-out;
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.winner-message {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.winner-details {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
 .player-cards {
   display: flex;
   gap: 4px;

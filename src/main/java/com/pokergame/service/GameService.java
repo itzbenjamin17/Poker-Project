@@ -163,10 +163,19 @@ public class GameService {
         activeGames.put(roomId, game);
 
         // Start the first hand
-        //startNewHand(roomId);
+        // startNewHand(roomId);
 
         room.setGameStarted();
-        System.out.println("Game created: " + roomId);
+
+        // Broadcast to all players in the room that the game has started
+        Map<String, Object> gameStartMessage = new HashMap<>();
+        gameStartMessage.put("gameId", roomId);
+        gameStartMessage.put("message", "Game started! Redirecting to game...");
+
+        webSocketHandler.broadcastToRoom(roomId,
+                new WebSocketMessage("GAME_STARTED", roomId, gameStartMessage));
+
+        System.out.println("Game created and broadcasted: " + roomId);
         return roomId;
     }
 

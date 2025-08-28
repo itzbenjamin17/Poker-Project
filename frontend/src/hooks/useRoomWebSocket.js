@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export const useRoomWebSocket = (roomId, playerName, onRoomUpdate) => {
+export const useRoomWebSocket = (roomId, playerName, onRoomUpdate, onGameStarted) => {
     const [connected, setConnected] = useState(false);
     const wsRef = useRef(null);
 
@@ -20,6 +20,12 @@ export const useRoomWebSocket = (roomId, playerName, onRoomUpdate) => {
                     break;
                 case 'ROOM_CLOSED':
                     onRoomUpdate(null); // Signal room was closed
+                    break;
+                case 'GAME_STARTED':
+                    console.log('Game started! Redirecting to game...', message.data);
+                    if (onGameStarted) {
+                        onGameStarted(message.data);
+                    }
                     break;
                 default: 
                     console.warn('Unknown WebSocket message type:', message.type);
@@ -71,7 +77,7 @@ export const useRoomWebSocket = (roomId, playerName, onRoomUpdate) => {
             }
             ws.close();
         };
-    }, [roomId, playerName, onRoomUpdate]);
+    }, [roomId, playerName, onRoomUpdate, onGameStarted]);
 
     return { connected };
 };

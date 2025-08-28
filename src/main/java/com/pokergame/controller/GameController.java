@@ -213,6 +213,47 @@ public class GameController {
         }
     }
 
+    /**
+     * GET GAME STATE (for GameRoomPage.js)
+     */
+    @GetMapping("/{gameId}/state")
+    public ResponseEntity<?> getGameState(@PathVariable String gameId) {
+        try {
+            var game = gameService.getGame(gameId);
+            if (game == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Create game state response for frontend
+            Map<String, Object> gameState = new HashMap<>();
+            gameState.put("gameId", gameId);
+            gameState.put("roomName", "Poker Game"); // You might want to get this from Room
+            gameState.put("maxPlayers", game.getPlayers().size()); // Adjust as needed
+            gameState.put("pot", game.getPot());
+            gameState.put("phase", game.getCurrentPhase().toString());
+            gameState.put("currentBet", game.getCurrentHighestBet());
+            gameState.put("communityCards", game.getCommunityCards());
+
+            // Convert players to frontend format
+            List<Map<String, Object>> playersList = new ArrayList<>();
+            for (var player : game.getPlayers()) {
+                Map<String, Object> playerData = new HashMap<>();
+                playerData.put("id", player.getPlayerId());
+                playerData.put("name", player.getName());
+                playerData.put("chips", player.getChips());
+                playerData.put("status", player.getHasFolded() ? "folded" : "active");
+                playerData.put("isCurrentPlayer", game.getCurrentPlayer().equals(player));
+                playerData.put("cards", player.getHoleCards()); // This will show cards for debugging
+                playersList.add(playerData);
+            }
+            gameState.put("players", playersList);
+
+            return ResponseEntity.ok(gameState);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Failed to get game state: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/test")
     public String test() {
         return "Poker backend is working!";

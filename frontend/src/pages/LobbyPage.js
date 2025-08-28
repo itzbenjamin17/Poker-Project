@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom"
 import { useRoomWebSocket } from "../hooks/useRoomWebSocket"
-import axios from "axios";
 
 function LobbyPage() {
     const navigate = useNavigate()
@@ -59,7 +58,18 @@ function LobbyPage() {
         setError("");
         }, [navigate]);
 
-    const { connected } = useRoomWebSocket(roomId, playerName, handleRoomUpdate);
+    const handleGameStarted = useCallback((gameData) => {
+        console.log('Game started via WebSocket:', gameData);
+        // Navigate all players to the game room when game starts
+        navigate(`/game/${roomId}`, { 
+            state: { 
+                playerName: playerName,
+                gameData: gameData 
+            } 
+        });
+    }, [navigate, roomId, playerName]);
+
+    const { connected } = useRoomWebSocket(roomId, playerName, handleRoomUpdate, handleGameStarted);
 
     // Fetch initial room data when component first loads (for direct navigation/refresh)
     const fetchInitialRoomData = useCallback(async () => {

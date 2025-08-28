@@ -20,6 +20,7 @@ function GameRoomPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
     const [currentPlayer, setCurrentPlayer] = useState(null)
+    const [betAmount, setBetAmount] = useState(0) // Add state for bet amount
 
     // Handle WebSocket game state updates
     const handleGameStateUpdate = useCallback((newGameState) => {
@@ -29,6 +30,13 @@ function GameRoomPage() {
         // Find the current player data
         const player = newGameState.players?.find(p => p.name === playerName);
         setCurrentPlayer(player);
+        
+        // Set default bet amount (minimum raise or double current bet)
+        const currentPlayerData = newGameState.players?.find(p => p.name === playerName);
+        const playerCurrentBet = currentPlayerData?.currentBet || 0;
+        const minRaise = (newGameState.currentBet || 0) - playerCurrentBet + 1;
+        const defaultRaise = Math.max(minRaise, (newGameState.currentBet || 0) * 2);
+        setBetAmount(defaultRaise);
         
         setError(""); // Clear any errors
         setLoading(false);
@@ -72,6 +80,17 @@ function GameRoomPage() {
         // Fetch initial game state when component mounts
         fetchGameState()
     }, [fetchGameState])
+
+    // Auto-clear validation errors after 5 seconds
+    useEffect(() => {
+        if (error && error.includes("Action failed")) {
+            const timer = setTimeout(() => {
+                setError("")
+            }, 5000)
+            
+            return () => clearTimeout(timer)
+        }
+    }, [error])
 
     const handleAction = async (action, amount = 0) => {
         console.log(`Player action: ${action}`, amount)
@@ -121,8 +140,8 @@ function GameRoomPage() {
         )
     }
 
-    // Show error state
-    if (error) {
+    // Show error state only for critical errors (not validation errors)
+    if (error && (error.includes("Failed to load game") || error.includes("Failed to connect"))) {
         return (
             <div className="game-room error">
                 <h2>Error</h2>
@@ -253,36 +272,103 @@ function GameRoomPage() {
                     </div>
                 </div>
 
-                {/* Only show betting controls if it's the current player's turn */}
-                {gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
+                {/* Only show betting controls if it's the current player's turn AND not in showdown */}
+                {gameState.phase !== 'SHOWDOWN' && gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
                     <div className="betting-controls">
                         <div className="action-buttons">
                             <button onClick={() => handleAction("FOLD")} className="btn btn-danger action-btn">
                                 Fold
                             </button>
-                            <button onClick={() => handleAction("CHECK")} className="btn btn-secondary action-btn">
-                                Check
-                            </button>
-                            <button onClick={() => handleAction("CALL")} className="btn btn-primary action-btn">
-                                Call ${gameState.currentBet}
-                            </button>
-                            <button
-                                onClick={() => handleAction("RAISE", gameState.currentBet * 2)}
-                                className="btn btn-success action-btn"
-                            >
-                                Raise
-                            </button>
+                            
+                            {/* Show CHECK only if player's current bet matches highest bet */}
+                            {(() => {
+                                const currentPlayer = gameState.players.find(p => p.name === playerName);
+                                const playerCurrentBet = currentPlayer?.currentBet || 0;
+                                const canCheck = playerCurrentBet === gameState.currentBet;
+                                const needsToCall = gameState.currentBet > playerCurrentBet;
+                                
+                                return (
+                                    <>
+                                        {canCheck && (
+                                            <button onClick={() => handleAction("CHECK")} className="btn btn-secondary action-btn">
+                                                Check
+                                            </button>
+                                        )}
+                                        
+                                        {needsToCall && (
+                                            <button onClick={() => handleAction("CALL")} className="btn btn-primary action-btn">
+                                                Call ${gameState.currentBet - playerCurrentBet}
+                                            </button>
+                                        )}
+                                        
+                                        <button
+                                            onClick={() => handleAction("RAISE", betAmount)}
+                                            className="btn btn-success action-btn"
+                                        >
+                                            Raise to ${betAmount}
+                                        </button>
+                                    </>
+                                );
+                            })()}
                         </div>
 
                         <div className="bet-amount">
-                            <label>Bet Amount:</label>
-                            <input type="number" min={gameState.currentBet} defaultValue={gameState.currentBet * 2} />
+                            <label>Raise Amount:</label>
+                            <input 
+                                type="number" 
+                                min={(() => {
+                                    const currentPlayer = gameState.players.find(p => p.name === playerName);
+                                    const playerCurrentBet = currentPlayer?.currentBet || 0;
+                                    return gameState.currentBet - playerCurrentBet + 1; // Minimum raise
+                                })()} 
+                                value={betAmount || (() => {
+                                    const currentPlayer = gameState.players.find(p => p.name === playerName);
+                                    const playerCurrentBet = currentPlayer?.currentBet || 0;
+                                    const minRaise = gameState.currentBet - playerCurrentBet + 1;
+                                    return Math.max(minRaise, gameState.currentBet * 2);
+                                })()} 
+                                onChange={(e) => setBetAmount(parseInt(e.target.value) || 0)}
+                            />
                         </div>
                     </div>
                 )}
 
-                {/* Show waiting message if it's not the player's turn */}
-                {!gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
+                {/* Show all players' cards during showdown */}
+                {gameState.phase === 'SHOWDOWN' && (
+                    <div className="showdown-section">
+                        <h3>Showdown - All Player Cards</h3>
+                        <div className="showdown-players">
+                            {gameState.players.filter(p => !p.hasFolded).map((player, index) => (
+                                <div key={index} className="showdown-player">
+                                    <h4>{player.name} - ${player.chips} chips</h4>
+                                    <div className="player-hand">
+                                        {player.cards && player.cards.map((card, cardIndex) => (
+                                            <div key={cardIndex} className="card showdown-card">
+                                                {formatCard(card)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {player.handRank && (
+                                        <p className="hand-rank">Hand: {player.handRank}</p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="showdown-message">
+                            <p>Determining winner... New hand will start shortly.</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Show validation errors within the game */}
+                {error && error.includes("Action failed") && (
+                    <div className="alert alert-danger mt-3">
+                        <strong>Invalid Action:</strong> {error.replace("Action failed: ", "")}
+                    </div>
+                )}
+
+                {/* Show waiting message if it's not the player's turn and not in showdown */}
+                {gameState.phase !== 'SHOWDOWN' && !gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
                     <div className="waiting-message">
                         <p>Waiting for {gameState.players.find(p => p.isCurrentPlayer)?.name || 'other player'} to act...</p>
                     </div>

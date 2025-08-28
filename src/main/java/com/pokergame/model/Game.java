@@ -24,6 +24,9 @@ public class Game {
     private final int smallBlind;
     private final int bigBlind;
 
+    // Track which players have acted in the current betting round
+    private final Set<String> playersWhoActedThisRound;
+
     public Game(String gameId, List<Player> players, int smallBlind, int bigBlind, HandEvaluatorService handEvaluator) {
         if (gameId == null || gameId.trim().isEmpty()) {
             throw new IllegalArgumentException("Game ID cannot be null or empty");
@@ -50,6 +53,7 @@ public class Game {
         this.smallBlind = smallBlind;
         this.bigBlind = bigBlind;
         this.handEvaluator = handEvaluator;
+        this.playersWhoActedThisRound = new HashSet<>();
     }
 
     public void resetForNewHand() {
@@ -58,6 +62,7 @@ public class Game {
         pot = 0;
         currentHighestBet = 0;
         currentPhase = GamePhase.PRE_FLOP;
+        playersWhoActedThisRound.clear(); // Clear action tracking for new hand
 
         activePlayers.clear();
         for (Player player : players) {
@@ -86,20 +91,56 @@ public class Game {
             this.pot = smallBlindPlayer.doAction(PlayerAction.BET, smallBlind, this.pot);
             this.pot = bigBlindPlayer.doAction(PlayerAction.BET, bigBlind, this.pot);
             currentHighestBet = bigBlind;
+
+            // Mark blind players as having acted (they've made their forced bets)
+            playersWhoActedThisRound.add(smallBlindPlayer.getPlayerId());
+            playersWhoActedThisRound.add(bigBlindPlayer.getPlayerId());
         }
     }
 
     public void processPlayerDecision(Player player, PlayerDecision decision) {
+        // Validate raise amounts
+        if (decision.action() == PlayerAction.RAISE) {
+            int totalBetAfterRaise = player.getCurrentBet() + decision.amount();
+            if (totalBetAfterRaise <= currentHighestBet) {
+                throw new IllegalArgumentException(
+                        "Raise amount must result in a bet higher than current highest bet of " + currentHighestBet +
+                                ". Your current bet is " + player.getCurrentBet() +
+                                ", so you need to raise by at least "
+                                + (currentHighestBet - player.getCurrentBet() + 1));
+            }
+        }
+
         switch (decision.action()) {
-            case FOLD, CHECK -> player.doAction(decision.action(), 0, this.pot);
+            case FOLD, CHECK -> {
+                player.doAction(decision.action(), 0, this.pot);
+                // Track that this player has acted in this betting round
+                playersWhoActedThisRound.add(player.getPlayerId());
+            }
             case CALL, BET, RAISE -> {
                 int amount = calculateActualAmount(player, decision);
                 this.pot = player.doAction(decision.action(), amount, this.pot);
                 if (player.getCurrentBet() > currentHighestBet) {
                     currentHighestBet = player.getCurrentBet();
+                    // When someone raises, all other players need to act again
+                    if (decision.action() == PlayerAction.RAISE) {
+                        String raisingPlayerId = player.getPlayerId();
+                        playersWhoActedThisRound.clear();
+                        playersWhoActedThisRound.add(raisingPlayerId); // Only the raising player has acted
+                    } else {
+                        // For CALL and BET, just track that this player has acted
+                        playersWhoActedThisRound.add(player.getPlayerId());
+                    }
+                } else {
+                    // Track that this player has acted in this betting round
+                    playersWhoActedThisRound.add(player.getPlayerId());
                 }
             }
-            case ALL_IN -> this.pot = player.doAction(PlayerAction.ALL_IN, 0, this.pot);
+            case ALL_IN -> {
+                this.pot = player.doAction(PlayerAction.ALL_IN, 0, this.pot);
+                // Track that this player has acted in this betting round
+                playersWhoActedThisRound.add(player.getPlayerId());
+            }
         }
     }
 
@@ -112,11 +153,42 @@ public class Game {
     }
 
     public boolean isBettingRoundComplete() {
-        // All active players have either folded, are all-in, or have matched the
-        // current highest bet.
-        return activePlayers.stream()
+        // Get all players who should have a chance to act (not folded, not all-in)
+        List<Player> playersWhoShouldAct = activePlayers.stream()
                 .filter(p -> !p.getHasFolded() && !p.getIsAllIn())
+                .toList();
+
+        System.out.println("Checking if betting round complete:");
+        System.out.println("  Players who should act: " + playersWhoShouldAct.stream().map(Player::getName).toList());
+        System.out.println("  Players who have acted: " + playersWhoActedThisRound);
+        System.out.println("  Current highest bet: " + currentHighestBet);
+
+        // If only 0 or 1 players can act, betting round is complete
+        if (playersWhoShouldAct.size() <= 1) {
+            System.out.println("  Result: Complete (only " + playersWhoShouldAct.size() + " players can act)");
+            return true;
+        }
+
+        // Check if all active players have either:
+        // 1. Folded or gone all-in, OR
+        // 2. Matched the current highest bet AND have acted this round
+        boolean allBetsEqual = playersWhoShouldAct.stream()
                 .allMatch(p -> p.getCurrentBet() == currentHighestBet);
+
+        boolean allPlayersHaveActed = playersWhoShouldAct.stream()
+                .allMatch(p -> playersWhoActedThisRound.contains(p.getPlayerId()));
+
+        System.out.println("  All bets equal (" + currentHighestBet + "): " + allBetsEqual);
+        System.out.println("  All players have acted: " + allPlayersHaveActed);
+
+        playersWhoShouldAct.forEach(p -> {
+            System.out.println("    " + p.getName() + ": bet=" + p.getCurrentBet() +
+                    ", acted=" + playersWhoActedThisRound.contains(p.getPlayerId()));
+        });
+
+        boolean result = allBetsEqual && allPlayersHaveActed;
+        System.out.println("  Result: " + (result ? "Complete" : "Not complete"));
+        return result;
     }
 
     public void dealFlop() {
@@ -138,21 +210,40 @@ public class Game {
     }
 
     public List<Player> conductShowdown() {
+        System.out.println("=== CONDUCTING SHOWDOWN ===");
         currentPhase = GamePhase.SHOWDOWN;
 
         List<Player> showdownPlayers = activePlayers.stream()
                 .filter(p -> !p.getHasFolded())
                 .toList();
 
+        System.out.println("Showdown players: " + showdownPlayers.stream().map(Player::getName).toList());
+        System.out.println("Current pot: " + pot);
+
         if (showdownPlayers.size() == 1) {
+            System.out.println("Only one player remaining, auto-win");
             distributePot(showdownPlayers);
             return showdownPlayers;
         }
 
+        System.out.println("Evaluating hands...");
         evaluateHands(showdownPlayers);
+
+        System.out.println("Hand rankings:");
+        showdownPlayers.forEach(
+                p -> System.out.println("  " + p.getName() + ": " + p.getHandRank() + " with " + p.getBestHand()));
+
+        System.out.println("Determining winners...");
         List<Player> winners = determineWinners(showdownPlayers);
+
+        System.out.println("Winners: " + winners.stream().map(Player::getName).toList());
+        System.out.println("Distributing pot of " + pot + " to " + winners.size() + " winner(s)");
         distributePot(winners);
 
+        System.out.println("Pot after distribution: " + pot);
+        winners.forEach(p -> System.out.println("  " + p.getName() + " now has " + p.getChips() + " chips"));
+
+        System.out.println("=== SHOWDOWN COMPLETE ===");
         return winners;
     }
 
@@ -190,14 +281,29 @@ public class Game {
     }
 
     private void distributePot(List<Player> winners) {
+        System.out.println("=== DISTRIBUTING POT ===");
         if (winners.isEmpty()) {
+            System.out.println("❌ No winners to distribute pot to!");
             return;
         }
+
+        System.out.println("Pot to distribute: " + pot);
+        System.out.println("Number of winners: " + winners.size());
+
         int potShare = pot / winners.size();
+        System.out.println("Each winner gets: " + potShare + " chips");
+
         for (Player winner : winners) {
+            int chipsBefore = winner.getChips();
             winner.addChips(potShare);
+            System.out.println("  " + winner.getName() + ": " + chipsBefore + " -> " + winner.getChips() + " chips");
         }
-        pot %= winners.size(); // Any remainder stays for the next hand
+
+        int remainder = pot % winners.size();
+        pot = remainder; // Any remainder stays for the next hand
+
+        System.out.println("Pot remainder for next hand: " + pot);
+        System.out.println("=== POT DISTRIBUTION COMPLETE ===");
     }
 
     public void advancePositions() {
@@ -208,15 +314,30 @@ public class Game {
     }
 
     public void cleanupAfterHand() {
+        System.out.println("Cleaning up after hand...");
+        System.out.println("Players before cleanup:");
+        players.forEach(
+                p -> System.out.println("  " + p.getName() + ": " + p.getChips() + " chips, isOut: " + p.getIsOut()));
+
         players.forEach(p -> {
             if (p.getChips() == 0) {
+                System.out.println("Setting " + p.getName() + " as out (0 chips)");
                 p.setIsOut();
             }
         });
+
+        int sizeBefore = activePlayers.size();
         activePlayers.removeIf(Player::getIsOut);
+        int sizeAfter = activePlayers.size();
+
+        System.out.println("Active players: " + sizeBefore + " -> " + sizeAfter);
+        System.out.println("Active players after cleanup: " + activePlayers.stream().map(Player::getName).toList());
 
         if (activePlayers.size() <= 1) {
+            System.out.println("Game over - only " + activePlayers.size() + " active players remaining");
             gameOver = true;
+        } else {
+            System.out.println("Game continues with " + activePlayers.size() + " active players");
         }
     }
 
@@ -230,6 +351,7 @@ public class Game {
             player.resetCurrentBet();
         }
         currentHighestBet = 0;
+        playersWhoActedThisRound.clear(); // Clear the tracking for the new round
     }
 
     // Getters and Setters

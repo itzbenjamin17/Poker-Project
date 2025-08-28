@@ -4,6 +4,7 @@ import com.pokergame.dto.CreateRoomRequest;
 import com.pokergame.dto.JoinRoomRequest;
 import com.pokergame.dto.PlayerActionRequest;
 import com.pokergame.model.Game;
+import com.pokergame.model.GamePhase;
 import com.pokergame.model.Player;
 import com.pokergame.model.Room;
 import com.pokergame.dto.PlayerDecision;
@@ -274,27 +275,54 @@ public class GameService {
 
     public void startNewHand(String gameId) {
         Game game = getGame(gameId);
+        System.out.println("=== STARTING NEW HAND ===");
+        System.out.println("Game ID: " + gameId);
+
         if (game.isGameOver()) {
+            System.out.println("❌ Game is over, cannot start new hand");
             return;
         }
 
+        System.out.println("✅ Game is not over, proceeding with new hand");
+        System.out.println("Resetting game state for new hand...");
         game.resetForNewHand();
+
+        if (game.isGameOver()) {
+            System.out.println("❌ Game became over after reset, stopping");
+            return;
+        }
+
+        System.out.println("Dealing hole cards...");
         game.dealHoleCards();
+
+        System.out.println("Posting blinds...");
         game.postBlinds();
 
         // Broadcast the initial game state to all players
+        System.out.println("Broadcasting new hand state...");
         broadcastGameState(gameId);
 
-        System.out.println("New hand started for game: " + gameId +
-                ", current player: " + game.getCurrentPlayer().getName());
+        System.out.println("✅ New hand started successfully!");
+        System.out.println("  Game: " + gameId);
+        System.out.println("  Current player: " + game.getCurrentPlayer().getName());
+        System.out.println("  Phase: " + game.getCurrentPhase());
+        System.out.println("  Pot: " + game.getPot());
+        System.out.println("=== NEW HAND COMPLETE ===");
     }
 
     public void processPlayerAction(String gameId, PlayerActionRequest actionRequest) {
         Game game = getGame(gameId);
         Player currentPlayer = game.getCurrentPlayer();
 
+        System.out.println("=== PROCESSING PLAYER ACTION ===");
+        System.out.println(
+                "Game: " + gameId + ", Player: " + currentPlayer.getName() + ", Action: " + actionRequest.action());
+        System.out.println("Phase: " + game.getCurrentPhase() + ", Current bet: " + game.getCurrentHighestBet());
+
         // Verify that the requesting player is the current player
         if (!currentPlayer.getName().equals(actionRequest.playerName())) {
+            System.out.println("❌ Player name mismatch: expected " + currentPlayer.getName() + ", got "
+                    + actionRequest.playerName());
             throw new SecurityException("It's not your turn. Current player is: " + currentPlayer.getName());
         }
 
@@ -303,18 +331,41 @@ public class GameService {
                 actionRequest.amount() != null ? actionRequest.amount() : 0,
                 currentPlayer.getPlayerId());
 
+        System.out.println("Processing decision: " + decision);
+
+        // Process the decision first - this is the critical operation that must succeed
         game.processPlayerDecision(currentPlayer, decision);
+        System.out.println("Decision processed successfully");
 
-        // Broadcast game state after player action
-        broadcastGameState(gameId);
-
-        if (game.isBettingRoundComplete()) {
-            advanceGame(gameId);
-        } else {
-            game.nextPlayer();
-            // Broadcast again after moving to next player
+        // After successful processing, handle game progression and broadcasting
+        // This is done in a try-catch to ensure that even if broadcasting fails,
+        // the action itself was successful
+        try {
+            // Broadcast game state after player action
             broadcastGameState(gameId);
+
+            System.out.println("Checking if betting round is complete...");
+            if (game.isBettingRoundComplete()) {
+                System.out.println("✅ Betting round complete, advancing game");
+                advanceGame(gameId);
+            } else {
+                System.out.println("❌ Betting round not complete, moving to next player");
+                game.nextPlayer();
+                // Broadcast again after moving to next player
+                broadcastGameState(gameId);
+            }
+        } catch (Exception e) {
+            System.err.println("Error in post-processing (action was successful): " + e.getMessage());
+            e.printStackTrace();
+            // Re-broadcast to ensure clients have updated state
+            try {
+                broadcastGameState(gameId);
+            } catch (Exception broadcastError) {
+                System.err.println("Failed to broadcast after error: " + broadcastError.getMessage());
+            }
         }
+
+        System.out.println("=== PLAYER ACTION COMPLETE ===");
     }
 
     private void conductBettingRound(String gameId) {
@@ -334,37 +385,54 @@ public class GameService {
 
     private void advanceGame(String gameId) {
         Game game = getGame(gameId);
+        System.out.println("Advancing game " + gameId + " from phase: " + game.getCurrentPhase());
+
         if (game.isHandOver()) {
+            System.out.println("Hand is over, conducting showdown...");
             List<Player> winners = game.conductShowdown();
+            System.out.println("Showdown complete. Winners: " + winners.stream().map(Player::getName).toList());
             // Broadcast showdown results
             broadcastGameState(gameId);
+
+            // Proceed immediately to next hand without delay
+            System.out.println("Proceeding to cleanup and new hand...");
             game.cleanupAfterHand();
             game.advancePositions();
+            System.out.println("Starting new hand...");
             startNewHand(gameId);
             return;
         }
-
         switch (game.getCurrentPhase()) {
             case PRE_FLOP:
+                System.out.println("Moving to FLOP phase");
                 game.dealFlop();
                 broadcastGameState(gameId);
                 break;
             case FLOP:
+                System.out.println("Moving to TURN phase");
                 game.dealTurn();
                 broadcastGameState(gameId);
                 break;
             case TURN:
+                System.out.println("Moving to RIVER phase");
                 game.dealRiver();
                 broadcastGameState(gameId);
                 break;
             case RIVER:
+                System.out.println("RIVER betting complete, conducting showdown...");
                 List<Player> winners = game.conductShowdown();
+                System.out.println("Showdown complete. Winners: " + winners.stream().map(Player::getName).toList());
                 broadcastGameState(gameId);
+
+                // Proceed immediately to next hand without delay
+                System.out.println("Proceeding to cleanup and new hand...");
                 game.cleanupAfterHand();
                 game.advancePositions();
+                System.out.println("Starting new hand after river...");
                 startNewHand(gameId);
                 break;
             case SHOWDOWN:
+                System.out.println("Already in showdown phase");
                 // Handle showdown phase
                 break;
         }
@@ -409,12 +477,28 @@ public class GameService {
             playerData.put("status", player.getHasFolded() ? "folded" : "active");
             playerData.put("isCurrentPlayer", currentPlayer != null && currentPlayer.equals(player));
             playerData.put("isAllIn", player.getIsAllIn());
+            playerData.put("hasFolded", player.getHasFolded());
 
-            // Only show cards to the player themselves (for security)
-            if (currentPlayer != null && currentPlayer.equals(player)) {
-                playerData.put("cards", player.getHoleCards());
+            // Add hand rank during showdown
+            if (game.getCurrentPhase() == GamePhase.SHOWDOWN && !player.getHasFolded()) {
+                playerData.put("handRank", player.getHandRank() != null ? player.getHandRank().toString() : "UNKNOWN");
+            }
+
+            // Show cards based on game phase
+            if (game.getCurrentPhase() == GamePhase.SHOWDOWN) {
+                // During showdown, show all non-folded players' cards to everyone
+                if (!player.getHasFolded()) {
+                    playerData.put("cards", player.getHoleCards());
+                } else {
+                    playerData.put("cards", new ArrayList<>());
+                }
             } else {
-                playerData.put("cards", new ArrayList<>()); // Empty for other players
+                // Only show cards to the player themselves (for security)
+                if (currentPlayer != null && currentPlayer.equals(player)) {
+                    playerData.put("cards", player.getHoleCards());
+                } else {
+                    playerData.put("cards", new ArrayList<>()); // Empty for other players
+                }
             }
             playersList.add(playerData);
         }

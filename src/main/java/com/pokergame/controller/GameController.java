@@ -243,6 +243,7 @@ public class GameController {
                 playerData.put("id", player.getPlayerId());
                 playerData.put("name", player.getName());
                 playerData.put("chips", player.getChips());
+                playerData.put("currentBet", player.getCurrentBet()); // Add current bet
                 playerData.put("status", player.getHasFolded() ? "folded" : "active");
                 playerData.put("isCurrentPlayer", game.getCurrentPlayer().equals(player));
 

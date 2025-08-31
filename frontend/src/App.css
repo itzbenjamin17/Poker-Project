@@ -509,6 +509,69 @@ body {
   color: white;
 }
 
+.player-status.all-in {
+  background: #ff8c00;
+  color: white;
+  font-weight: bold;
+  animation: all-in-pulse 2s ease-in-out infinite;
+}
+
+@keyframes all-in-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* Auto-advance notification */
+.auto-advance-notification {
+  background: linear-gradient(135deg, #ff8c00, #ff7b00);
+  color: white;
+  padding: 12px 20px;
+  margin: 10px 20px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(255, 140, 0, 0.3);
+  animation: auto-advance-pulse 2s ease-in-out infinite;
+}
+
+@keyframes auto-advance-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 0.9;
+  }
+}
+
+.auto-advance-message {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.auto-advance-details {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #ff8c00, #ff7b00);
+  color: white;
+  font-weight: bold;
+}
+
+.btn-warning:hover {
+  background: linear-gradient(135deg, #ff7b00, #ff6600);
+  transform: translateY(-2px);
+}
+
 .current-player .player-info {
   border: 2px solid #d4af37;
   background: rgba(212, 175, 55, 0.2);

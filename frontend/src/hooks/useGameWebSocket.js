@@ -42,6 +42,18 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
                     console.log('Game ended:', message.data);
                     // Handle game ending
                     break;
+                case 'AUTO_ADVANCE_NOTIFICATION':
+                    console.log('Auto-advance notification:', message.data);
+                    if (onGameStateUpdate) {
+                        // Send just the auto-advance flags, not a complete game state
+                        onGameStateUpdate({
+                            isAutoAdvancing: true,
+                            autoAdvanceMessage: message.data.message || "Auto-advancing...",
+                            // Keep this minimal to avoid overriding the game state
+                            _isNotificationOnly: true
+                        });
+                    }
+                    break;
                 default: 
                     console.warn('Unknown game WebSocket message type:', message.type);
             }

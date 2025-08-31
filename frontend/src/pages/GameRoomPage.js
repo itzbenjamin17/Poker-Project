@@ -27,6 +27,10 @@ function GameRoomPage() {
     const [showdownStartTime, setShowdownStartTime] = useState(null)
     const [isShowingShowdown, setIsShowingShowdown] = useState(false)
     
+    // State for auto-advance
+    const [isAutoAdvancing, setIsAutoAdvancing] = useState(false)
+    const [autoAdvanceMessage, setAutoAdvanceMessage] = useState("")
+    
     // Use refs to avoid useCallback dependency issues
     const showdownStateRef = useRef(null)
     const showdownStartTimeRef = useRef(null)
@@ -35,6 +39,19 @@ function GameRoomPage() {
     // Handle WebSocket game state updates
     const handleGameStateUpdate = useCallback((newGameState) => {
         console.log('Received game state update:', newGameState);
+        
+        // Check for auto-advance state
+        if (newGameState.isAutoAdvancing !== undefined) {
+            console.log('Auto-advance state:', newGameState.isAutoAdvancing, newGameState.autoAdvanceMessage);
+            setIsAutoAdvancing(newGameState.isAutoAdvancing);
+            setAutoAdvanceMessage(newGameState.autoAdvanceMessage || "");
+        }
+        
+        // If this is just an auto-advance notification without full game state, don't update gameState
+        if (newGameState._isNotificationOnly) {
+            console.log('Received auto-advance notification only, not updating full game state');
+            return;
+        }
         
         // Extra debugging for showdown
         if (newGameState.phase === 'SHOWDOWN') {
@@ -215,10 +232,10 @@ function GameRoomPage() {
     }
 
     // Show message if no game state loaded
-    if (!gameState) {
+    if (!gameState || !gameState.players || !gameState.communityCards) {
         return (
             <div className="game-room">
-                <h2>Game not found</h2>
+                <h2>Loading game state...</h2>
                 <button onClick={() => navigate("/")} className="btn btn-primary">
                     Back to Home
                 </button>
@@ -241,7 +258,7 @@ function GameRoomPage() {
                     <h2>{gameState.roomName}</h2>
                     <div className="game-stats">
             <span className="stat">
-              Players: {gameState.players.length}/{gameState.maxPlayers}
+              Players: {gameState.players?.length || 0}/{gameState.maxPlayers}
             </span>
                         <span className="stat">Pot: ${gameState.pot}</span>
                         <span className="stat">Phase: {gameState.phase}</span>
@@ -258,13 +275,13 @@ function GameRoomPage() {
                     <div className="community-cards">
                         <h3>Community Cards</h3>
                         <div className="cards-container">
-                            {gameState.communityCards.map((card, index) => (
+                            {(gameState.communityCards || []).map((card, index) => (
                                 <div key={index} className="card community-card">
                                     {formatCard(card)}
                                 </div>
                             ))}
                             {/* Placeholder cards */}
-                            {Array.from({ length: 5 - gameState.communityCards.length }).map((_, index) => (
+                            {Array.from({ length: 5 - (gameState.communityCards?.length || 0) }).map((_, index) => (
                                 <div key={`placeholder-${index}`} className="card card-placeholder">
                                     ?
                                 </div>
@@ -282,7 +299,7 @@ function GameRoomPage() {
 
                     {/* Players */}
                     <div className="players-area">
-                        {gameState.players.map((player, index) => {
+                        {(gameState.players || []).map((player, index) => {
                             // Check if this player is a winner (during showdown or using cached showdown state)
                             const displayState = isShowingShowdown && showdownState ? showdownState : gameState;
                             const isWinner = player.isWinner || (displayState.winners && displayState.winners.includes(player.name));
@@ -292,7 +309,7 @@ function GameRoomPage() {
                                 <div
                                     key={player.id}
                                     className={`player-seat ${player.status} ${player.isCurrentPlayer ? "current-player" : ""} ${isWinner && isShowdown ? "winner-player" : ""}`}
-                                    style={getPlayerPosition(index, gameState.players.length)}
+                                    style={getPlayerPosition(index, gameState.players?.length || 1)}
                                 >
                                     {/* Winner overlay */}
                                     {isWinner && isShowdown && (
@@ -345,7 +362,7 @@ function GameRoomPage() {
                     <h3>Your Hand</h3>
                     <div className="hand-cards">
                         {gameState.players
-                            .find((p) => p.name === playerName)
+                            ?.find((p) => p.name === playerName)
                             ?.cards?.map((card, index) => (
                                 <div key={index} className="card my-card-large">
                                     {formatCard(card)}
@@ -357,8 +374,8 @@ function GameRoomPage() {
                     </div>
                 </div>
 
-                {/* Only show betting controls if it's the current player's turn AND not in showdown */}
-                {gameState.phase !== 'SHOWDOWN' && gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
+                {/* Only show betting controls if it's the current player's turn AND not in showdown AND not auto-advancing */}
+                {!isAutoAdvancing && gameState.phase !== 'SHOWDOWN' && gameState.players?.find(p => p.isCurrentPlayer && p.name === playerName) && (
                     <div className="betting-controls">
                         <div className="action-buttons">
                             <button onClick={() => handleAction("FOLD")} className="btn btn-danger action-btn">
@@ -367,7 +384,7 @@ function GameRoomPage() {
                             
                             {/* Show CHECK only if player's current bet matches highest bet */}
                             {(() => {
-                                const currentPlayer = gameState.players.find(p => p.name === playerName);
+                                const currentPlayer = gameState.players?.find(p => p.name === playerName);
                                 const playerCurrentBet = currentPlayer?.currentBet || 0;
                                 const canCheck = playerCurrentBet === gameState.currentBet;
                                 const needsToCall = gameState.currentBet > playerCurrentBet;
@@ -392,6 +409,13 @@ function GameRoomPage() {
                                         >
                                             Raise to ${betAmount}
                                         </button>
+                                        
+                                        <button 
+                                            onClick={() => handleAction("ALL_IN")} 
+                                            className="btn btn-warning action-btn"
+                                        >
+                                            All In (${currentPlayer?.chips || 0})
+                                        </button>
                                     </>
                                 );
                             })()}
@@ -402,18 +426,30 @@ function GameRoomPage() {
                             <input 
                                 type="number" 
                                 min={(() => {
-                                    const currentPlayer = gameState.players.find(p => p.name === playerName);
+                                    const currentPlayer = gameState.players?.find(p => p.name === playerName);
                                     const playerCurrentBet = currentPlayer?.currentBet || 0;
                                     return gameState.currentBet - playerCurrentBet + 1; // Minimum raise
                                 })()} 
                                 value={betAmount || (() => {
-                                    const currentPlayer = gameState.players.find(p => p.name === playerName);
+                                    const currentPlayer = gameState.players?.find(p => p.name === playerName);
                                     const playerCurrentBet = currentPlayer?.currentBet || 0;
                                     const minRaise = gameState.currentBet - playerCurrentBet + 1;
                                     return Math.max(minRaise, gameState.currentBet * 2);
                                 })()} 
                                 onChange={(e) => setBetAmount(parseInt(e.target.value) || 0)}
                             />
+                        </div>
+                    </div>
+                )}
+
+                {/* Show auto-advance message */}
+                {isAutoAdvancing && (
+                    <div className="auto-advance-notification">
+                        <div className="auto-advance-message">
+                            🎰 {autoAdvanceMessage}
+                        </div>
+                        <div className="auto-advance-details">
+                            Please wait while the remaining cards are revealed...
                         </div>
                     </div>
                 )}
@@ -446,10 +482,10 @@ function GameRoomPage() {
                     </div>
                 )}
 
-                {/* Show waiting message if it's not the player's turn and not in showdown */}
-                {gameState.phase !== 'SHOWDOWN' && !gameState.players.find(p => p.isCurrentPlayer && p.name === playerName) && (
+                {/* Show waiting message if it's not the player's turn and not in showdown and not auto-advancing */}
+                {!isAutoAdvancing && gameState.phase !== 'SHOWDOWN' && !gameState.players?.find(p => p.isCurrentPlayer && p.name === playerName) && (
                     <div className="waiting-message">
-                        <p>Waiting for {gameState.players.find(p => p.isCurrentPlayer)?.name || 'other player'} to act...</p>
+                        <p>Waiting for {gameState.players?.find(p => p.isCurrentPlayer)?.name || 'other player'} to act...</p>
                     </div>
                 )}
             </div>

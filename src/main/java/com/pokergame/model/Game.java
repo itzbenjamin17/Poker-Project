@@ -24,8 +24,8 @@ public class Game {
     private final int smallBlind;
     private final int bigBlind;
 
-    // Track which players have acted in the current betting round
-    private final Set<String> playersWhoActedThisRound;
+    // Track if everyone has had their initial turn in current betting round
+    private boolean everyoneHasHadInitialTurn;
 
     public Game(String gameId, List<Player> players, int smallBlind, int bigBlind, HandEvaluatorService handEvaluator) {
         if (gameId == null || gameId.trim().isEmpty()) {
@@ -53,7 +53,7 @@ public class Game {
         this.smallBlind = smallBlind;
         this.bigBlind = bigBlind;
         this.handEvaluator = handEvaluator;
-        this.playersWhoActedThisRound = new HashSet<>();
+        this.everyoneHasHadInitialTurn = false;
     }
 
     public void resetForNewHand() {
@@ -62,7 +62,6 @@ public class Game {
         pot = 0;
         currentHighestBet = 0;
         currentPhase = GamePhase.PRE_FLOP;
-        playersWhoActedThisRound.clear(); // Clear action tracking for new hand
 
         activePlayers.clear();
         for (Player player : players) {
@@ -91,17 +90,27 @@ public class Game {
             this.pot = smallBlindPlayer.doAction(PlayerAction.BET, smallBlind, this.pot);
             this.pot = bigBlindPlayer.doAction(PlayerAction.BET, bigBlind, this.pot);
             currentHighestBet = bigBlind;
-
-            // Mark blind players as having acted (they've made their forced bets)
-            playersWhoActedThisRound.add(smallBlindPlayer.getPlayerId());
-            playersWhoActedThisRound.add(bigBlindPlayer.getPlayerId());
         }
     }
 
-    public void processPlayerDecision(Player player, PlayerDecision decision) {
-        // Validate raise amounts
-        if (decision.action() == PlayerAction.RAISE) {
-            int totalBetAfterRaise = player.getCurrentBet() + decision.amount();
+    public String processPlayerDecision(Player player, PlayerDecision decision) {
+        // Check if there are all-in players that would limit raises
+        boolean hasAllInPlayers = activePlayers.stream()
+                .anyMatch(p -> p.getIsAllIn() && !p.getHasFolded());
+
+        // If there are all-in players and someone tries to raise, convert it to a call
+        PlayerDecision actualDecision = decision;
+        String conversionMessage = null;
+
+        if (hasAllInPlayers && decision.action() == PlayerAction.RAISE) {
+            System.out.println("Player attempted to raise but there are all-in players. Converting to call.");
+            actualDecision = new PlayerDecision(PlayerAction.CALL, 0, decision.playerId());
+            conversionMessage = "Your raise was converted to a call because there are all-in players.";
+        }
+
+        // Validate raise amounts (only if still a raise after conversion)
+        if (actualDecision.action() == PlayerAction.RAISE) {
+            int totalBetAfterRaise = player.getCurrentBet() + actualDecision.amount();
             if (totalBetAfterRaise <= currentHighestBet) {
                 throw new IllegalArgumentException(
                         "Raise amount must result in a bet higher than current highest bet of " + currentHighestBet +
@@ -111,37 +120,26 @@ public class Game {
             }
         }
 
-        switch (decision.action()) {
+        switch (actualDecision.action()) {
             case FOLD, CHECK -> {
-                player.doAction(decision.action(), 0, this.pot);
-                // Track that this player has acted in this betting round
-                playersWhoActedThisRound.add(player.getPlayerId());
+                player.doAction(actualDecision.action(), 0, this.pot);
             }
             case CALL, BET, RAISE -> {
-                int amount = calculateActualAmount(player, decision);
-                this.pot = player.doAction(decision.action(), amount, this.pot);
+                int amount = calculateActualAmount(player, actualDecision);
+                this.pot = player.doAction(actualDecision.action(), amount, this.pot);
                 if (player.getCurrentBet() > currentHighestBet) {
                     currentHighestBet = player.getCurrentBet();
-                    // When someone raises, all other players need to act again
-                    if (decision.action() == PlayerAction.RAISE) {
-                        String raisingPlayerId = player.getPlayerId();
-                        playersWhoActedThisRound.clear();
-                        playersWhoActedThisRound.add(raisingPlayerId); // Only the raising player has acted
-                    } else {
-                        // For CALL and BET, just track that this player has acted
-                        playersWhoActedThisRound.add(player.getPlayerId());
-                    }
-                } else {
-                    // Track that this player has acted in this betting round
-                    playersWhoActedThisRound.add(player.getPlayerId());
                 }
             }
             case ALL_IN -> {
                 this.pot = player.doAction(PlayerAction.ALL_IN, 0, this.pot);
-                // Track that this player has acted in this betting round
-                playersWhoActedThisRound.add(player.getPlayerId());
+                if (player.getCurrentBet() > currentHighestBet) {
+                    currentHighestBet = player.getCurrentBet();
+                }
             }
         }
+
+        return conversionMessage; // Return null if no conversion, or the message if converted
     }
 
     private int calculateActualAmount(Player player, PlayerDecision decision) {
@@ -153,40 +151,42 @@ public class Game {
     }
 
     public boolean isBettingRoundComplete() {
-        // Get all players who should have a chance to act (not folded, not all-in)
-        List<Player> playersWhoShouldAct = activePlayers.stream()
-                .filter(p -> !p.getHasFolded() && !p.getIsAllIn())
-                .toList();
-
-        System.out.println("Checking if betting round complete:");
-        System.out.println("  Players who should act: " + playersWhoShouldAct.stream().map(Player::getName).toList());
-        System.out.println("  Players who have acted: " + playersWhoActedThisRound);
-        System.out.println("  Current highest bet: " + currentHighestBet);
-
-        // If only 0 or 1 players can act, betting round is complete
-        if (playersWhoShouldAct.size() <= 1) {
-            System.out.println("  Result: Complete (only " + playersWhoShouldAct.size() + " players can act)");
-            return true;
+        // Phase 1: Everyone must have their initial turn first (like your VB.NET logic)
+        if (!everyoneHasHadInitialTurn) {
+            System.out.println("Betting round not complete: Not everyone has had initial turn");
+            return false;
         }
 
-        // Check if all active players have either:
-        // 1. Folded or gone all-in, OR
-        // 2. Matched the current highest bet AND have acted this round
-        boolean allBetsEqual = playersWhoShouldAct.stream()
-                .allMatch(p -> p.getCurrentBet() == currentHighestBet);
+        // Phase 2: Based on your VB.NET logic: While Table.Any(Function(item)
+        // item.CurrentBet < CurrentHighestBetCopy AndAlso item.HasFolded = False
+        // AndAlso item.IsAllIn = False)
+        // Betting round is complete when NO such player exists
+        boolean hasPlayerWhoNeedsToAct = activePlayers.stream()
+                .anyMatch(p -> p.getCurrentBet() < currentHighestBet &&
+                        !p.getHasFolded() &&
+                        !p.getIsAllIn());
 
-        boolean allPlayersHaveActed = playersWhoShouldAct.stream()
-                .allMatch(p -> playersWhoActedThisRound.contains(p.getPlayerId()));
+        System.out.println("Checking if betting round complete:");
+        System.out.println("  Current highest bet: " + currentHighestBet);
+        System.out.println("  Everyone has had initial turn: " + everyoneHasHadInitialTurn);
+        System.out.println("  Active players status:");
+        activePlayers.forEach(p -> {
+            System.out.println("    " + p.getName() + ": bet=" + p.getCurrentBet() +
+                    ", folded=" + p.getHasFolded() +
+                    ", allIn=" + p.getIsAllIn() +
+                    ", needsToAct=" + (p.getCurrentBet() < currentHighestBet && !p.getHasFolded() && !p.getIsAllIn()));
+        });
 
-        System.out.println("  All bets equal (" + currentHighestBet + "): " + allBetsEqual);
-        System.out.println("  All players have acted: " + allPlayersHaveActed);
+        boolean isComplete = !hasPlayerWhoNeedsToAct;
+        System.out.println("  Result: " + (isComplete ? "Complete" : "Not complete") +
+                " (hasPlayerWhoNeedsToAct=" + hasPlayerWhoNeedsToAct + ")");
 
-        playersWhoShouldAct.forEach(p -> System.out.println("    " + p.getName() + ": bet=" + p.getCurrentBet() +
-                ", acted=" + playersWhoActedThisRound.contains(p.getPlayerId())));
+        return isComplete;
+    }
 
-        boolean result = allBetsEqual && allPlayersHaveActed;
-        System.out.println("  Result: " + (result ? "Complete" : "Not complete"));
-        return result;
+    public void setEveryoneHasHadInitialTurn(boolean value) {
+        this.everyoneHasHadInitialTurn = value;
+        System.out.println("Set everyoneHasHadInitialTurn = " + value);
     }
 
     public void dealFlop() {
@@ -352,7 +352,7 @@ public class Game {
             player.resetCurrentBet();
         }
         currentHighestBet = 0;
-        playersWhoActedThisRound.clear(); // Clear the tracking for the new round
+        everyoneHasHadInitialTurn = false; // Reset for new betting round
     }
 
     // Getters and Setters

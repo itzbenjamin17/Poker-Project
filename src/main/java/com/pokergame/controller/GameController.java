@@ -243,7 +243,9 @@ public class GameController {
                 playerData.put("name", player.getName());
                 playerData.put("chips", player.getChips());
                 playerData.put("currentBet", player.getCurrentBet()); // Add current bet
-                playerData.put("status", player.getHasFolded() ? "folded" : "active");
+                playerData.put("status",
+                        player.getHasFolded() ? "folded" : (player.getIsAllIn() ? "all-in" : "active"));
+                playerData.put("isAllIn", player.getIsAllIn());
                 playerData.put("isCurrentPlayer", game.getCurrentPlayer().equals(player));
 
                 // Only send cards to the player who owns them, or if no playerName specified

@@ -291,8 +291,27 @@ function GameRoomPage() {
         }
     }
 
-    const leaveRoom = () => {
-        navigate("/")
+    const leaveRoom = async () => {
+        try {
+            // Call the API to properly leave the game
+            await fetch(`http://localhost:8080/api/game/${gameId}/leave`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    playerName: playerName
+                })
+            });
+
+            // Navigate back to home regardless of API response
+            // (in case the game was already destroyed)
+            navigate("/");
+        } catch (error) {
+            console.error('Error leaving game:', error);
+            // Still navigate home even if API call fails
+            navigate("/");
+        }
     }
 
     // Show loading state

@@ -211,6 +211,32 @@ public class GameController {
     }
 
     /**
+     * LEAVE GAME - Remove player from active game
+     */
+    @PostMapping("/{gameId}/leave")
+    public ResponseEntity<?> leaveGame(@PathVariable String gameId, @RequestBody Map<String, String> request) {
+        try {
+            String playerName = request.get("playerName");
+
+            if (playerName == null || playerName.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("Player name is required");
+            }
+
+            gameService.leaveGame(gameId, playerName.trim());
+
+            Map<String, Object> response = Map.of(
+                    "message", "Successfully left game",
+                    "playerName", playerName);
+
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Failed to leave game: " + e.getMessage());
+        }
+    }
+
+    /**
      * GET GAME STATE (for GameRoomPage.js)
      */
     @GetMapping("/{gameId}/state")

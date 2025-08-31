@@ -268,6 +268,72 @@ public class GameService {
         roomHosts.remove(roomId);
     }
 
+    /**
+     * Remove player from active game
+     */
+    public void leaveGame(String gameId, String playerName) {
+        Game game = getGame(gameId);
+        if (game == null) {
+            throw new IllegalArgumentException("Game not found");
+        }
+
+        // Find and remove the player from the game
+        Player playerToRemove = game.getPlayers().stream()
+                .filter(p -> p.getName().equals(playerName))
+                .findFirst()
+                .orElse(null);
+
+        if (playerToRemove == null) {
+            throw new IllegalArgumentException("Player not found in game");
+        }
+
+        // Check if the leaving player was the current player
+        boolean wasCurrentPlayer = game.getCurrentPlayer() != null && game.getCurrentPlayer().equals(playerToRemove);
+
+        // Remove player from both lists
+        game.getPlayers().remove(playerToRemove);
+        game.getActivePlayers().remove(playerToRemove);
+
+        System.out.println("Player " + playerName + " left game " + gameId);
+        System.out.println("Remaining players: " + game.getPlayers().size());
+
+        // Check if no players left in the game
+        if (game.getPlayers().isEmpty()) {
+            System.out.println("All players left game " + gameId + ", destroying game and room");
+
+            // Notify any remaining WebSocket connections that the room is closed
+            webSocketHandler.broadcastToRoom(gameId,
+                    new WebSocketMessage("ROOM_CLOSED", gameId, Map.of("reason", "All players left the game")));
+
+            // Clean up game and room data
+            activeGames.remove(gameId);
+            Room room = rooms.remove(gameId);
+            if (room != null) {
+                roomHosts.remove(gameId);
+                System.out.println("Room " + room.getRoomName() + " has been destroyed - all players left");
+            }
+        } else {
+            // Game continues with remaining players
+            System.out.println("Game continues with " + game.getPlayers().size() + " players");
+
+            // If only one player remains, end the game immediately
+            if (game.getPlayers().size() == 1) {
+                System.out.println("Only one player remaining, ending game");
+                handleGameEnd(gameId);
+                return;
+            }
+
+            // If the leaving player was the current player, advance to next player
+            if (wasCurrentPlayer && !game.getActivePlayers().isEmpty()) {
+                // Need to reset the current player since the list changed
+                game.nextPlayer();
+            }
+
+            // Broadcast updated game state to remaining players
+            broadcastGameState(gameId);
+        }
+    }
+
     public void startNewHand(String gameId) {
         Game game = getGame(gameId);
         System.out.println("=== STARTING NEW HAND ===");
@@ -618,13 +684,11 @@ public class GameService {
 
                 System.out.println("Auto-advancing: Showdown results broadcast complete");
 
-                // Turn off auto-advance mode after showdown
-                Thread.sleep(1000);
-                broadcastGameStateWithAutoAdvance(gameId, false, "");
-                System.out.println("Auto-advancing: Auto-advance mode disabled");
-
-                // Wait before starting the next hand
-                Thread.sleep(15000);
+                // Wait longer to let winner display show properly before starting the next hand
+                // No need to send additional state updates that would override the winner
+                // display
+                System.out.println("Auto-advancing: Waiting for winner display (16 seconds total)");
+                Thread.sleep(16000);
                 System.out.println("Auto-advancing: Cleaning up and starting new hand");
                 game.cleanupAfterHand();
 

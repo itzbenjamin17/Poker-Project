@@ -94,18 +94,30 @@ public class Game {
     }
 
     public String processPlayerDecision(Player player, PlayerDecision decision) {
-        // Check if there are all-in players that would limit raises
+        // Check if there are all-in players that would limit raises/all-ins
         boolean hasAllInPlayers = activePlayers.stream()
                 .anyMatch(p -> p.getIsAllIn() && !p.getHasFolded());
 
-        // If there are all-in players and someone tries to raise, convert it to a call
+        // If there are all-in players, convert raises and all-ins to calls (unless
+        // player has fewer chips)
         PlayerDecision actualDecision = decision;
         String conversionMessage = null;
 
-        if (hasAllInPlayers && decision.action() == PlayerAction.RAISE) {
-            System.out.println("Player attempted to raise but there are all-in players. Converting to call.");
-            actualDecision = new PlayerDecision(PlayerAction.CALL, 0, decision.playerId());
-            conversionMessage = "Your raise was converted to a call because there are all-in players.";
+        if (hasAllInPlayers && (decision.action() == PlayerAction.RAISE || decision.action() == PlayerAction.ALL_IN)) {
+            // Check if the player has enough chips to actually call the current bet
+            int callAmount = currentHighestBet - player.getCurrentBet();
+
+            if (decision.action() == PlayerAction.ALL_IN && player.getChips() <= callAmount) {
+                // Player doesn't have enough chips to call, so legitimate all-in
+                System.out.println("Player going all-in with insufficient chips to call - allowing all-in.");
+            } else {
+                // Player has enough chips to call or is trying to raise - convert to call
+                System.out.println("Player attempted to " + decision.action()
+                        + " but there are all-in players. Converting to call.");
+                actualDecision = new PlayerDecision(PlayerAction.CALL, 0, decision.playerId());
+                conversionMessage = "Your " + decision.action().toString().toLowerCase()
+                        + " was converted to a call because there are all-in players.";
+            }
         }
 
         // Validate raise amounts (only if still a raise after conversion)

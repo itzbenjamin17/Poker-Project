@@ -7,8 +7,61 @@ import { useGameWebSocket } from "../hooks/useGameWebSocket"
 function GameRoomPage() {
     // Helper function to format card objects for display
     const formatCard = (card) => {
-        if (!card || typeof card !== 'object') return '?';
-        return `${card.rank || '?'} of ${card.suit || '?'}`;
+        if (!card || typeof card !== 'object') {
+            return <div className="card-placeholder-text">?</div>;
+        }
+        
+        const cardName = `${card.rank} of ${card.suit}`;
+        // Convert to underscore format for filename
+        const fileName = cardName.replace(/ /g, '_');
+        const imagePath = `/card-images/${fileName}.png`;
+        
+        console.log('Rendering card:', cardName, 'Path:', imagePath); // Debug log
+        
+        return (
+            <div className="card-container">
+                <img 
+                    src={imagePath} 
+                    alt={cardName}
+                    className="card-image"
+                    onError={(e) => {
+                        console.log('Image failed to load:', imagePath);
+                        // Show text fallback
+                        e.target.style.display = 'none';
+                        if (e.target.nextElementSibling) {
+                            e.target.nextElementSibling.style.display = 'flex';
+                        }
+                    }}
+                    onLoad={(e) => {
+                        console.log('Image loaded successfully:', imagePath);
+                    }}
+                />
+                <div className="card-fallback-text" style={{display: 'none'}}>
+                    {cardName}
+                </div>
+            </div>
+        );
+    };
+
+    // Helper function to get card back image for hidden cards
+    const getCardBack = () => {
+        return (
+            <div className="card-container">
+                <img 
+                    src="/card-images/card-back.svg" 
+                    alt="Hidden Card"
+                    className="card-image card-back"
+                    onError={(e) => {
+                        console.log('Card back image failed to load');
+                        e.target.style.display = 'none';
+                        if (e.target.nextElementSibling) {
+                            e.target.nextElementSibling.style.display = 'flex';
+                        }
+                    }}
+                />
+                <div className="card-back-text" style={{display: 'none'}}>🂠</div>
+            </div>
+        );
     };
     const { id: gameId } = useParams()
     const navigate = useNavigate()
@@ -31,6 +84,13 @@ function GameRoomPage() {
     const [isAutoAdvancing, setIsAutoAdvancing] = useState(false)
     const [autoAdvanceMessage, setAutoAdvanceMessage] = useState("")
     
+    // State for player notifications
+    const [playerNotification, setPlayerNotification] = useState("")
+    
+    // State for game end
+    const [gameEnded, setGameEnded] = useState(false)
+    const [gameEndMessage, setGameEndMessage] = useState("")
+    
     // Use refs to avoid useCallback dependency issues
     const showdownStateRef = useRef(null)
     const showdownStartTimeRef = useRef(null)
@@ -47,9 +107,35 @@ function GameRoomPage() {
             setAutoAdvanceMessage(newGameState.autoAdvanceMessage || "");
         }
         
-        // If this is just an auto-advance notification without full game state, don't update gameState
+        // Check for player notifications
+        if (newGameState.playerNotification) {
+            console.log('Player notification:', newGameState.playerNotification);
+            setPlayerNotification(newGameState.playerNotification);
+            // Auto-clear notification after 5 seconds
+            setTimeout(() => {
+                setPlayerNotification("");
+            }, 5000);
+        }
+        
+        // Check for game end
+        if (newGameState.gameEnded) {
+            console.log('Game ended:', newGameState.gameEndMessage);
+            setGameEnded(true);
+            setGameEndMessage(newGameState.gameEndMessage);
+        }
+        
+        // Check for room closed
+        if (newGameState.roomClosed) {
+            console.log('Room closed:', newGameState.closeReason);
+            // Navigate back to home after a brief delay
+            setTimeout(() => {
+                navigate('/');
+            }, 2000);
+        }
+        
+        // If this is just a notification without full game state, don't update gameState
         if (newGameState._isNotificationOnly) {
-            console.log('Received auto-advance notification only, not updating full game state');
+            console.log('Received notification only, not updating full game state');
             return;
         }
         
@@ -118,7 +204,7 @@ function GameRoomPage() {
         
         setError(""); // Clear any errors
         setLoading(false);
-    }, [playerName]);
+    }, [playerName, navigate]);
 
     // WebSocket connection for real-time game updates
     useGameWebSocket(gameId, playerName, handleGameStateUpdate);
@@ -269,6 +355,37 @@ function GameRoomPage() {
                 </button>
             </div>
 
+            {/* Player notification banner - prominently displayed at top */}
+            {playerNotification && (
+                <div className="player-notification-banner">
+                    <div className="notification-content">
+                        <span className="notification-icon">ℹ️</span>
+                        <span className="notification-text">{playerNotification}</span>
+                        <button 
+                            className="notification-close"
+                            onClick={() => setPlayerNotification("")}
+                        >
+                            ×
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Game End Display */}
+            {gameEnded && (
+                <div className="game-end-overlay">
+                    <div className="game-end-content">
+                        <h2 className="game-end-title">🎉 Game Over! 🎉</h2>
+                        <div className="game-end-message">
+                            {gameEndMessage}
+                        </div>
+                        <div className="game-end-countdown">
+                            Returning to home page...
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="poker-table">
                 <div className="table-felt">
                     {/* Community Cards */}
@@ -276,14 +393,14 @@ function GameRoomPage() {
                         <h3>Community Cards</h3>
                         <div className="cards-container">
                             {(gameState.communityCards || []).map((card, index) => (
-                                <div key={index} className="card community-card">
+                                <div key={index} className="card community-card has-image">
                                     {formatCard(card)}
                                 </div>
                             ))}
                             {/* Placeholder cards */}
                             {Array.from({ length: 5 - (gameState.communityCards?.length || 0) }).map((_, index) => (
                                 <div key={`placeholder-${index}`} className="card card-placeholder">
-                                    ?
+                                    <div className="card-placeholder-text">?</div>
                                 </div>
                             ))}
                         </div>
@@ -336,8 +453,8 @@ function GameRoomPage() {
                                     <div className="player-cards">
                                         {player.cards && player.cards.length > 0 ? (
                                             player.cards.map((card, cardIndex) => (
-                                                <div key={cardIndex} className={`card ${player.name === playerName ? "my-card" : "opponent-card"}`}>
-                                                    {player.name === playerName ? formatCard(card) : "🂠"}
+                                                <div key={cardIndex} className={`card has-image ${player.name === playerName ? "my-card" : "opponent-card"}`}>
+                                                    {player.name === playerName ? formatCard(card) : getCardBack()}
                                                 </div>
                                             ))
                                         ) : (
@@ -364,7 +481,7 @@ function GameRoomPage() {
                         {gameState.players
                             ?.find((p) => p.name === playerName)
                             ?.cards?.map((card, index) => (
-                                <div key={index} className="card my-card-large">
+                                <div key={index} className="card my-card-large has-image">
                                     {formatCard(card)}
                                 </div>
                             )) || (

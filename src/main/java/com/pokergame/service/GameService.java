@@ -399,6 +399,62 @@ public class GameService {
                 new WebSocketMessage("PLAYER_NOTIFICATION", gameId, notification));
     }
 
+    private void handleGameEnd(String gameId) {
+        Game game = getGame(gameId);
+        if (game == null)
+            return;
+
+        // Find the winner (last remaining player)
+        Player winner = game.getActivePlayers().stream()
+                .findFirst()
+                .orElse(null);
+
+        if (winner == null) {
+            // Edge case: no active players (should not happen)
+            winner = game.getPlayers().stream()
+                    .filter(p -> !p.getIsOut())
+                    .findFirst()
+                    .orElse(game.getPlayers().get(0)); // Fallback to first player
+        }
+
+        System.out.println("🏆 GAME OVER! Winner: " + winner.getName() + " with " + winner.getChips() + " chips");
+
+        // Broadcast game end message
+        Map<String, Object> gameEndData = new HashMap<>();
+        gameEndData.put("type", "GAME_END");
+        gameEndData.put("winner", winner.getName());
+        gameEndData.put("winnerChips", winner.getChips());
+        gameEndData.put("gameId", gameId);
+        gameEndData.put("message", "🏆 " + winner.getName() + " wins the game with " + winner.getChips() + " chips!");
+
+        webSocketHandler.broadcastToRoom(gameId,
+                new WebSocketMessage("GAME_END", gameId, gameEndData));
+
+        // Wait a few seconds for players to see the result, then destroy the room
+        new Thread(() -> {
+            try {
+                Thread.sleep(10000); // 10 second delay to show winner
+                System.out.println("Destroying room after game end: " + gameId);
+
+                // Notify players that room is being destroyed
+                webSocketHandler.broadcastToRoom(gameId,
+                        new WebSocketMessage("ROOM_CLOSED", gameId, Map.of("reason", "Game completed")));
+
+                // Clean up game and room data
+                activeGames.remove(gameId);
+                Room room = rooms.remove(gameId);
+                if (room != null) {
+                    roomHosts.remove(gameId);
+                    System.out.println("Room " + room.getRoomName() + " has been destroyed after game completion");
+                }
+
+            } catch (InterruptedException e) {
+                System.err.println("Interrupted while cleaning up game: " + e.getMessage());
+                Thread.currentThread().interrupt();
+            }
+        }).start();
+    }
+
     private void advanceGame(String gameId) {
         Game game = getGame(gameId);
         System.out.println("Advancing game " + gameId + " from phase: " + game.getCurrentPhase());
@@ -419,6 +475,14 @@ public class GameService {
                     Thread.sleep(15000); // 15 second delay
                     System.out.println("Proceeding to cleanup and new hand...");
                     game.cleanupAfterHand();
+
+                    // Check if game is over after cleanup
+                    if (game.isGameOver()) {
+                        System.out.println("Game is over! Handling end of game...");
+                        handleGameEnd(gameId);
+                        return;
+                    }
+
                     game.advancePositions();
                     System.out.println("Starting new hand...");
                     startNewHand(gameId);
@@ -480,6 +544,14 @@ public class GameService {
                         Thread.sleep(15000); // 15 second delay
                         System.out.println("Proceeding to cleanup and new hand...");
                         game.cleanupAfterHand();
+
+                        // Check if game is over after cleanup
+                        if (game.isGameOver()) {
+                            System.out.println("Game is over after river! Handling end of game...");
+                            handleGameEnd(gameId);
+                            return;
+                        }
+
                         game.advancePositions();
                         System.out.println("Starting new hand after river...");
                         startNewHand(gameId);
@@ -555,6 +627,14 @@ public class GameService {
                 Thread.sleep(15000);
                 System.out.println("Auto-advancing: Cleaning up and starting new hand");
                 game.cleanupAfterHand();
+
+                // Check if game is over after cleanup
+                if (game.isGameOver()) {
+                    System.out.println("Auto-advancing: Game is over! Handling end of game...");
+                    handleGameEnd(gameId);
+                    return;
+                }
+
                 game.advancePositions();
                 startNewHand(gameId);
 

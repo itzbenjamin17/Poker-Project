@@ -360,6 +360,78 @@ body {
   gap: 0.5rem;
 }
 
+/* Player Notification Banner */
+.player-notification-banner {
+  background: linear-gradient(135deg, #ff6b35, #ff8c42);
+  border: 2px solid #ff4500;
+  border-radius: 10px;
+  margin: 1rem 2rem;
+  padding: 0;
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+  animation: slideDown 0.3s ease-out, pulse 2s infinite;
+  position: relative;
+  z-index: 1000;
+}
+
+.notification-content {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  gap: 1rem;
+}
+
+.notification-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.notification-text {
+  flex: 1;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.notification-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  color: white;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.notification-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+  }
+  50% {
+    box-shadow: 0 6px 25px rgba(255, 107, 53, 0.6);
+  }
+}
+
 .poker-table {
   flex: 1;
   display: flex;
@@ -403,8 +475,6 @@ body {
 .card {
   width: 50px;
   height: 70px;
-  background: white;
-  border: 2px solid #333;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -413,14 +483,22 @@ body {
   font-weight: bold;
   color: #333;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: relative;
+  overflow: hidden;
+  background: white;
+  border: 2px solid #333;
 }
 
-.community-card {
-  font-size: 12px;
+/* Cards with images should not have background or border */
+.card.has-image {
+  background: none;
+  border: none;
 }
 
+/* Cards without images (placeholders) keep the original styling */
 .card-placeholder {
   background: #666;
+  border: 2px solid #333;
   color: #999;
   border-style: dashed;
 }
@@ -725,6 +803,12 @@ body {
   font-size: 18px;
   background: white;
   color: #333;
+}
+
+/* Override background for cards with images */
+.my-card-large.has-image {
+  background: none;
+  border: none;
 }
 
 .betting-controls {
@@ -1109,4 +1193,146 @@ body {
   color: #ccc;
   margin-bottom: 0.5rem;
   font-style: italic;
+}
+
+/* Game End Overlay */
+.game-end-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.game-end-content {
+  background: linear-gradient(135deg, #0f4c3a, #1a5f4a);
+  border: 3px solid #d4af37;
+  border-radius: 20px;
+  padding: 3rem;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: slideInScale 0.5s ease-out;
+  max-width: 500px;
+  width: 90%;
+}
+
+.game-end-title {
+  font-size: 2.5rem;
+  color: #d4af37;
+  margin-bottom: 1.5rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.game-end-winner {
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+}
+
+.winner-label {
+  color: #ccc;
+  margin-right: 0.5rem;
+}
+
+.winner-name {
+  color: #d4af37;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.game-end-message {
+  font-size: 1.2rem;
+  color: #fff;
+  margin-bottom: 1.5rem;
+  line-height: 1.4;
+}
+
+.game-end-countdown {
+  font-size: 1rem;
+  color: #ccc;
+  font-style: italic;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInScale {
+  from { 
+    transform: scale(0.8) translateY(-20px);
+    opacity: 0;
+  }
+  to { 
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Card Image Styles */
+.card-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.card-back {
+  opacity: 0.9;
+}
+
+.card-placeholder-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 1.5rem;
+  color: #888;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.card-back-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 2rem;
+  background: #1a472a;
+  border-radius: 8px;
+}
+
+.card-fallback-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  color: #333;
+  font-weight: bold;
+  font-size: 0.8rem;
+  text-align: center;
+  border-radius: 8px;
+  word-wrap: break-word;
+  padding: 2px;
 }

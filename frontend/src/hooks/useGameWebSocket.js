@@ -38,9 +38,32 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
                         onGameStateUpdate(message.data);
                     }
                     break;
-                case 'GAME_ENDED':
+                case 'GAME_END':
                     console.log('Game ended:', message.data);
-                    // Handle game ending
+                    if (onGameStateUpdate) {
+                        // Send game end information
+                        onGameStateUpdate({
+                            gameEnded: true,
+                            winner: message.data.winner,
+                            winnerChips: message.data.winnerChips,
+                            gameEndMessage: message.data.message,
+                            _isNotificationOnly: true
+                        });
+                    }
+                    break;
+                case 'ROOM_CLOSED':
+                    console.log('Room closed:', message.data);
+                    if (onGameStateUpdate) {
+                        onGameStateUpdate({
+                            roomClosed: true,
+                            closeReason: message.data.reason || "Room closed",
+                            _isNotificationOnly: true
+                        });
+                    }
+                    break;
+                case 'GAME_ENDED':
+                    console.log('Game ended (legacy):', message.data);
+                    // Handle legacy game ending
                     break;
                 case 'AUTO_ADVANCE_NOTIFICATION':
                     console.log('Auto-advance notification:', message.data);
@@ -49,6 +72,17 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
                         onGameStateUpdate({
                             isAutoAdvancing: true,
                             autoAdvanceMessage: message.data.message || "Auto-advancing...",
+                            // Keep this minimal to avoid overriding the game state
+                            _isNotificationOnly: true
+                        });
+                    }
+                    break;
+                case 'PLAYER_NOTIFICATION':
+                    console.log('Player notification:', message.data);
+                    if (onGameStateUpdate) {
+                        // Send just the notification, not a complete game state
+                        onGameStateUpdate({
+                            playerNotification: message.data.message,
                             // Keep this minimal to avoid overriding the game state
                             _isNotificationOnly: true
                         });

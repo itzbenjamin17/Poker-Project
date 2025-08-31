@@ -460,8 +460,8 @@ function GameRoomPage() {
                                         ) : (
                                             // Show placeholder cards for players without visible cards
                                             Array.from({ length: 2 }).map((_, cardIndex) => (
-                                                <div key={cardIndex} className="card opponent-card">
-                                                    🂠
+                                                <div key={cardIndex} className="card opponent-card has-image">
+                                                    {getCardBack()}
                                                 </div>
                                             ))
                                         )}
@@ -478,16 +478,20 @@ function GameRoomPage() {
                 <div className="my-hand">
                     <h3>Your Hand</h3>
                     <div className="hand-cards">
-                        {gameState.players
-                            ?.find((p) => p.name === playerName)
-                            ?.cards?.map((card, index) => (
-                                <div key={index} className="card my-card-large has-image">
-                                    {formatCard(card)}
-                                </div>
-                            )) || (
-                            // Show placeholder if no cards found
-                            <div className="no-cards">No cards dealt yet</div>
-                        )}
+                        {(() => {
+                            // Use the same display state logic as the player cards on the table
+                            const displayState = isShowingShowdown && showdownState ? showdownState : gameState;
+                            return displayState.players
+                                ?.find((p) => p.name === playerName)
+                                ?.cards?.map((card, index) => (
+                                    <div key={index} className="card my-card-large has-image">
+                                        {formatCard(card)}
+                                    </div>
+                                )) || (
+                                // Show placeholder if no cards found
+                                <div className="no-cards">No cards dealt yet</div>
+                            );
+                        })()}
                     </div>
                 </div>
 

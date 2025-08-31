@@ -735,6 +735,21 @@ public class GameService {
             return;
         }
 
+        // Send personalized game state to each player
+        for (var targetPlayer : game.getPlayers()) {
+            broadcastGameStateToPlayer(gameId, targetPlayer.getName());
+        }
+    }
+
+    /**
+     * Broadcast personalized game state to a specific player
+     */
+    public void broadcastGameStateToPlayer(String gameId, String playerName) {
+        Game game = getGame(gameId);
+        if (game == null) {
+            return;
+        }
+
         // Create game state data for WebSocket broadcast
         Map<String, Object> gameState = new HashMap<>();
         gameState.put("gameId", gameId);
@@ -750,7 +765,7 @@ public class GameService {
             gameState.put("currentPlayerId", currentPlayer.getPlayerId());
         }
 
-        // Convert players to frontend format (without showing other players' cards)
+        // Convert players to frontend format, showing cards only to the target player
         List<Map<String, Object>> playersList = new ArrayList<>();
         for (var player : game.getPlayers()) {
             Map<String, Object> playerData = new HashMap<>();
@@ -768,20 +783,18 @@ public class GameService {
                 playerData.put("handRank", player.getHandRank() != null ? player.getHandRank().toString() : "UNKNOWN");
             }
 
-            // Show cards based on game phase
+            // Show cards based on game phase and target player
             if (game.getCurrentPhase() == GamePhase.SHOWDOWN) {
                 // During showdown, show all non-folded players' best hands to everyone
                 if (!player.getHasFolded()) {
                     List<Card> bestHand = player.getBestHand();
                     playerData.put("cards", bestHand != null ? bestHand : new ArrayList<>());
-                    System.out.println("Sending best hand for " + player.getName() + ": " +
-                            (bestHand != null ? bestHand.size() + " cards" : "null"));
                 } else {
                     playerData.put("cards", new ArrayList<>());
                 }
             } else {
                 // Only show cards to the player themselves (for security)
-                if (currentPlayer != null && currentPlayer.equals(player)) {
+                if (player.getName().equals(playerName)) {
                     playerData.put("cards", player.getHoleCards());
                 } else {
                     playerData.put("cards", new ArrayList<>()); // Empty for other players
@@ -791,12 +804,11 @@ public class GameService {
         }
         gameState.put("players", playersList);
 
-        // Broadcast to all players
-        webSocketHandler.broadcastToRoom(gameId,
+        // Send to specific player
+        webSocketHandler.sendToPlayer(gameId, playerName,
                 new WebSocketMessage("GAME_STATE_UPDATE", gameId, gameState));
 
-        System.out.println("Broadcasted game state for game: " + gameId + ", current player: " +
-                (currentPlayer != null ? currentPlayer.getName() : "none"));
+        System.out.println("Broadcasted game state for game: " + gameId + " to player: " + playerName);
     }
 
     /**

@@ -133,6 +133,27 @@ public class RoomWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    public void sendToPlayer(String roomId, String playerName, WebSocketMessage message) {
+        Set<WebSocketSession> sessions = roomSessions.get(roomId);
+        if (sessions == null || sessions.isEmpty()) {
+            System.out.println("No WebSocket sessions found for room: " + roomId);
+            return;
+        }
+
+        System.out.println("Sending to player " + playerName + " in room " + roomId + ": " + message.type());
+
+        // Find the session for the specific player
+        for (WebSocketSession session : sessions) {
+            String sessionPlayerName = sessionToPlayer.get(session);
+            if (playerName.equals(sessionPlayerName)) {
+                sendToSession(session, message);
+                return;
+            }
+        }
+
+        System.out.println("Player " + playerName + " not found in room " + roomId);
+    }
+
     private void sendToSession(WebSocketSession session, WebSocketMessage message) {
         try {
             if (session.isOpen()) {

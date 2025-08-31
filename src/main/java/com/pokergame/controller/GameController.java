@@ -255,7 +255,12 @@ public class GameController {
             Map<String, Object> gameState = new HashMap<>();
             gameState.put("gameId", gameId);
             gameState.put("roomName", "Poker Game"); // You might want to get this from Room
-            gameState.put("maxPlayers", game.getPlayers().size()); // Adjust as needed
+
+            // Get the original room's max players setting instead of current player count
+            Map<String, Object> roomData = gameService.getRoomData(gameId);
+            int maxPlayers = roomData != null ? (Integer) roomData.get("maxPlayers") : game.getPlayers().size();
+            gameState.put("maxPlayers", maxPlayers);
+
             gameState.put("pot", game.getPot());
             gameState.put("phase", game.getCurrentPhase().toString());
             gameState.put("currentBet", game.getCurrentHighestBet());

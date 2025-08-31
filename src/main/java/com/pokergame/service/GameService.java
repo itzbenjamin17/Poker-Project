@@ -535,10 +535,10 @@ public class GameService {
             broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
             // Add delay before starting new hand to allow frontend to display results
-            System.out.println("Waiting 15 seconds before starting new hand...");
+            System.out.println("Waiting 10 seconds before starting new hand...");
             new Thread(() -> {
                 try {
-                    Thread.sleep(15000); // 15 second delay
+                    Thread.sleep(10000); // 10 second delay
                     System.out.println("Proceeding to cleanup and new hand...");
                     game.cleanupAfterHand();
 
@@ -604,10 +604,10 @@ public class GameService {
                 broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
                 // Add delay before starting new hand to allow frontend to display results
-                System.out.println("Waiting 15 seconds before starting new hand...");
+                System.out.println("Waiting 10 seconds before starting new hand...");
                 new Thread(() -> {
                     try {
-                        Thread.sleep(15000); // 15 second delay
+                        Thread.sleep(10000); // 10 second delay
                         System.out.println("Proceeding to cleanup and new hand...");
                         game.cleanupAfterHand();
 
@@ -684,11 +684,15 @@ public class GameService {
 
                 System.out.println("Auto-advancing: Showdown results broadcast complete");
 
+                // Turn off auto-advance state now that showdown is complete
+                System.out.println("Auto-advancing: Turning off auto-advance state");
+                broadcastAutoAdvanceComplete(gameId);
+
                 // Wait longer to let winner display show properly before starting the next hand
                 // No need to send additional state updates that would override the winner
                 // display
-                System.out.println("Auto-advancing: Waiting for winner display (16 seconds total)");
-                Thread.sleep(16000);
+                System.out.println("Auto-advancing: Waiting for winner display (10 seconds total)");
+                Thread.sleep(10000);
                 System.out.println("Auto-advancing: Cleaning up and starting new hand");
                 game.cleanupAfterHand();
 
@@ -721,6 +725,20 @@ public class GameService {
 
         webSocketHandler.broadcastToRoom(gameId,
                 new WebSocketMessage("AUTO_ADVANCE_NOTIFICATION", gameId, notification));
+    }
+
+    private void broadcastAutoAdvanceComplete(String gameId) {
+        Game game = getGame(gameId);
+        if (game == null)
+            return;
+
+        Map<String, Object> notification = new HashMap<>();
+        notification.put("type", "AUTO_ADVANCE_COMPLETE");
+        notification.put("message", "");
+        notification.put("gameId", gameId);
+
+        webSocketHandler.broadcastToRoom(gameId,
+                new WebSocketMessage("AUTO_ADVANCE_COMPLETE", gameId, notification));
     }
 
     private void broadcastGameStateWithAutoAdvance(String gameId, boolean isAutoAdvancing, String message) {

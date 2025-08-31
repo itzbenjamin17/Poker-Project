@@ -77,6 +77,18 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
                         });
                     }
                     break;
+                case 'AUTO_ADVANCE_COMPLETE':
+                    console.log('Auto-advance complete:', message.data);
+                    if (onGameStateUpdate) {
+                        // Turn off auto-advance state without affecting game state
+                        onGameStateUpdate({
+                            isAutoAdvancing: false,
+                            autoAdvanceMessage: "",
+                            // Keep this minimal to avoid overriding the game state
+                            _isNotificationOnly: true
+                        });
+                    }
+                    break;
                 case 'PLAYER_NOTIFICATION':
                     console.log('Player notification:', message.data);
                     if (onGameStateUpdate) {

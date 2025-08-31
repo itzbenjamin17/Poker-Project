@@ -63,6 +63,37 @@ function GameRoomPage() {
             </div>
         );
     };
+
+    // Helper function to format hand rank for display
+    const formatHandRank = (handRank) => {
+        if (!handRank) return '';
+        
+        // Convert enum name to display format
+        const formatted = handRank
+            .replace(/_/g, ' ')           // Replace underscores with spaces
+            .toLowerCase()                // Convert to lowercase
+            .replace(/\b\w/g, char => char.toUpperCase()); // Capitalize first letter of each word
+        
+        return formatted;
+    };
+
+    // Helper function to format game phase for display
+    const formatPhase = (phase) => {
+        if (!phase) return '';
+        
+        // Special cases for poker phases
+        const phaseMap = {
+            'PRE_FLOP': 'Pre-Flop',
+            'FLOP': 'Flop',
+            'TURN': 'Turn',
+            'RIVER': 'River',
+            'SHOWDOWN': 'Showdown',
+            'WAITING': 'Waiting',
+            'ENDED': 'Game Over'
+        };
+        
+        return phaseMap[phase] || phase.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+    };
     const { id: gameId } = useParams()
     const navigate = useNavigate()
     const location = useLocation()
@@ -165,7 +196,7 @@ function GameRoomPage() {
             // If we receive a new hand state while showing showdown, delay the transition
             console.log('New hand state received while showing showdown, delaying transition...');
             const elapsed = Date.now() - showdownStartTimeRef.current;
-            const remainingTime = Math.max(0, 12000 - elapsed); // Show showdown for at least 12 seconds
+            const remainingTime = Math.max(0, 10000 - elapsed); // Show showdown for at least 10 seconds
             
             setTimeout(() => {
                 console.log('Showdown display time complete, switching to new hand');
@@ -366,7 +397,7 @@ function GameRoomPage() {
               Players: {gameState.players?.length || 0}/{gameState.maxPlayers}
             </span>
                         <span className="stat">Pot: ${gameState.pot}</span>
-                        <span className="stat">Phase: {gameState.phase}</span>
+                        <span className="stat">Phase: {formatPhase(gameState.phase)}</span>
                     </div>
                 </div>
                 <button onClick={leaveRoom} className="btn btn-danger">
@@ -454,7 +485,7 @@ function GameRoomPage() {
                                                 🏆 WINNER
                                             </div>
                                             <div className="winner-hand">
-                                                {player.handRank || "Best Hand"}
+                                                {formatHandRank(player.handRank) || "Best Hand"}
                                             </div>
                                             {player.chipsWon && (
                                                 <div className="winner-amount">
@@ -603,8 +634,8 @@ function GameRoomPage() {
                         return (
                             <div className="winner-announcement">
                                 <div className="winner-message">
-                                    � {winners.length === 1 ? 'Winner' : 'Winners'}: {winners.map(w => w.name).join(', ')}
-                                    {winners.length === 1 && winners[0].handRank && ` with ${winners[0].handRank}`}
+                                    🏆 {winners.length === 1 ? 'Winner' : 'Winners'}: {winners.map(w => w.name).join(', ')}
+                                    {winners.length === 1 && winners[0].handRank && ` with a ${formatHandRank(winners[0].handRank)}`}
                                 </div>
                                 <div className="winner-details">
                                     Pot: ${displayState.pot} • New hand starting soon...

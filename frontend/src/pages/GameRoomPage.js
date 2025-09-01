@@ -475,7 +475,8 @@ function GameRoomPage() {
                                         {player.cards && player.cards.length > 0 ? (
                                             player.cards.map((card, cardIndex) => (
                                                 <div key={cardIndex} className={`card has-image ${player.name === playerName ? "my-card" : "opponent-card"}`}>
-                                                    {player.name === playerName ? formatCard(card) : getCardBack()}
+                                                    {/* Show all cards during showdown for non-folded players, or only own cards during regular play */}
+                                                    {(displayState.phase === 'SHOWDOWN' && !player.hasFolded) || player.name === playerName ? formatCard(card) : getCardBack()}
                                                 </div>
                                             ))
                                         ) : (

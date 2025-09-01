@@ -467,7 +467,7 @@ function GameRoomPage() {
                                     )}
                                     
                                     <div className="player-info">
-                                        <span className="player-name">{player.name}</span>
+                                        <span className="player-name">{player.name === playerName ? "You" : player.name}</span>
                                         <span className="player-chips">${player.chips}</span>
                                         <span className={`player-status ${player.status}`}>{player.status}</span>
                                     </div>

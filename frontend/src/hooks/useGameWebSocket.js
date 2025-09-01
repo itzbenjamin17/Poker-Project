@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
+/**
+ * Custom hook for managing WebSocket connections during active poker games.
+ * Handles real-time game state updates, player actions, and game events.
+ * 
+ * @param {string} gameId - The unique identifier for the game
+ * @param {string} playerName - The name of the current player
+ * @param {function} onGameStateUpdate - Callback for game state changes
+ * @returns {object} Connection status and utilities
+ */
 export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
     const [connected, setConnected] = useState(false);
     const wsRef = useRef(null);
@@ -8,38 +17,23 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
         if (!gameId || !playerName) return;
 
         const handleWebSocketMessage = (message) => {
-            console.log('=== WebSocket message received ===');
-            console.log('Type:', message.type);
-            console.log('Full message:', message);
-            
             switch (message.type) {
                 case 'GAME_STATE_UPDATE':
-                    console.log('Game state update received:', message.data);
-                    if (message.data.phase === 'SHOWDOWN') {
-                        console.log('GAME_STATE_UPDATE with SHOWDOWN phase!');
-                        console.log('Winners in GAME_STATE_UPDATE:', message.data.winners);
-                    }
                     if (onGameStateUpdate) {
                         onGameStateUpdate(message.data);
                     }
                     break;
                 case 'SHOWDOWN_RESULTS':
-                    console.log('=== SHOWDOWN_RESULTS message received ===');
-                    console.log('Showdown results received:', message.data);
-                    console.log('Winners in SHOWDOWN_RESULTS:', message.data.winners);
-                    console.log('Players in SHOWDOWN_RESULTS:', message.data.players);
                     if (onGameStateUpdate) {
                         onGameStateUpdate(message.data);
                     }
                     break;
                 case 'PLAYER_ACTION':
-                    console.log('Player action:', message.data);
                     if (onGameStateUpdate) {
                         onGameStateUpdate(message.data);
                     }
                     break;
                 case 'GAME_END':
-                    console.log('Game ended:', message.data);
                     if (onGameStateUpdate) {
                         // Send game end information
                         onGameStateUpdate({
@@ -52,7 +46,6 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
                     }
                     break;
                 case 'ROOM_CLOSED':
-                    console.log('Room closed:', message.data);
                     if (onGameStateUpdate) {
                         onGameStateUpdate({
                             roomClosed: true,
@@ -62,46 +55,42 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
                     }
                     break;
                 case 'GAME_ENDED':
-                    console.log('Game ended (legacy):', message.data);
                     // Handle legacy game ending
                     break;
                 case 'AUTO_ADVANCE_NOTIFICATION':
-                    console.log('Auto-advance notification:', message.data);
                     if (onGameStateUpdate) {
-                        // Send just the auto-advance flags, not a complete game state
+                        // Send auto-advance notification without overriding game state
                         onGameStateUpdate({
                             isAutoAdvancing: true,
                             autoAdvanceMessage: message.data.message || "Auto-advancing...",
-                            // Keep this minimal to avoid overriding the game state
                             _isNotificationOnly: true
                         });
                     }
                     break;
                 case 'AUTO_ADVANCE_COMPLETE':
-                    console.log('Auto-advance complete:', message.data);
                     if (onGameStateUpdate) {
                         // Turn off auto-advance state without affecting game state
                         onGameStateUpdate({
                             isAutoAdvancing: false,
                             autoAdvanceMessage: "",
-                            // Keep this minimal to avoid overriding the game state
                             _isNotificationOnly: true
                         });
                     }
                     break;
                 case 'PLAYER_NOTIFICATION':
-                    console.log('Player notification:', message.data);
                     if (onGameStateUpdate) {
-                        // Send just the notification, not a complete game state
+                        // Send player notification without overriding game state
                         onGameStateUpdate({
                             playerNotification: message.data.message,
-                            // Keep this minimal to avoid overriding the game state
                             _isNotificationOnly: true
                         });
                     }
                     break;
                 default: 
-                    console.warn('Unknown game WebSocket message type:', message.type);
+                    // Unknown message type - log in development only
+                    if (process.env.NODE_ENV === 'development') {
+                        console.warn('Unknown game WebSocket message type:', message.type);
+                    }
             }
         };
 
@@ -110,7 +99,6 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
         wsRef.current = ws;
 
         ws.onopen = () => {
-            console.log('Game WebSocket connected to game:', gameId);
             setConnected(true);
             // Join the game room for real-time updates
             ws.send(JSON.stringify({
@@ -123,7 +111,6 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
         ws.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                console.log('Game WebSocket message received:', message);
                 handleWebSocketMessage(message);
             } catch (error) {
                 console.error('Error parsing game WebSocket message:', error);
@@ -131,7 +118,6 @@ export const useGameWebSocket = (gameId, playerName, onGameStateUpdate) => {
         };
 
         ws.onclose = (event) => {
-            console.log('Game WebSocket disconnected:', event.code, event.reason);
             setConnected(false);
         };
 

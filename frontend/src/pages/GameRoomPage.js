@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { useGameWebSocket } from "../hooks/useGameWebSocket"
 
+/**
+ * Main game room component for the poker game interface.
+ * Handles game state, player actions, card display, and real-time updates.
+ */
 function GameRoomPage() {
     // Helper function to format card objects for display
     const formatCard = (card) => {
@@ -16,8 +20,6 @@ function GameRoomPage() {
         const fileName = cardName.replace(/ /g, '_');
         const imagePath = `/card-images/${fileName}.png`;
         
-        console.log('Rendering card:', cardName, 'Path:', imagePath); // Debug log
-        
         return (
             <div className="card-container">
                 <img 
@@ -25,15 +27,11 @@ function GameRoomPage() {
                     alt={cardName}
                     className="card-image"
                     onError={(e) => {
-                        console.log('Image failed to load:', imagePath);
-                        // Show text fallback
+                        // Show text fallback if image fails to load
                         e.target.style.display = 'none';
                         if (e.target.nextElementSibling) {
                             e.target.nextElementSibling.style.display = 'flex';
                         }
-                    }}
-                    onLoad={(e) => {
-                        console.log('Image loaded successfully:', imagePath);
                     }}
                 />
                 <div className="card-fallback-text" style={{display: 'none'}}>
@@ -52,7 +50,7 @@ function GameRoomPage() {
                     alt="Hidden Card"
                     className="card-image card-back"
                     onError={(e) => {
-                        console.log('Card back image failed to load');
+                        // Fallback to text if card back image fails to load
                         e.target.style.display = 'none';
                         if (e.target.nextElementSibling) {
                             e.target.nextElementSibling.style.display = 'flex';
@@ -129,18 +127,14 @@ function GameRoomPage() {
 
     // Handle WebSocket game state updates
     const handleGameStateUpdate = useCallback((newGameState) => {
-        console.log('Received game state update:', newGameState);
-        
         // Check for auto-advance state
         if (newGameState.isAutoAdvancing !== undefined) {
-            console.log('Auto-advance state:', newGameState.isAutoAdvancing, newGameState.autoAdvanceMessage);
             setIsAutoAdvancing(newGameState.isAutoAdvancing);
             setAutoAdvanceMessage(newGameState.autoAdvanceMessage || "");
         }
         
         // Check for player notifications
         if (newGameState.playerNotification) {
-            console.log('Player notification:', newGameState.playerNotification);
             setPlayerNotification(newGameState.playerNotification);
             // Auto-clear notification after 5 seconds
             setTimeout(() => {
@@ -150,14 +144,12 @@ function GameRoomPage() {
         
         // Check for game end
         if (newGameState.gameEnded) {
-            console.log('Game ended:', newGameState.gameEndMessage);
             setGameEnded(true);
             setGameEndMessage(newGameState.gameEndMessage);
         }
         
         // Check for room closed
         if (newGameState.roomClosed) {
-            console.log('Room closed:', newGameState.closeReason);
             // Navigate back to home after a brief delay
             setTimeout(() => {
                 navigate('/');
@@ -166,25 +158,11 @@ function GameRoomPage() {
         
         // If this is just a notification without full game state, don't update gameState
         if (newGameState._isNotificationOnly) {
-            console.log('Received notification only, not updating full game state');
             return;
         }
         
-        // Extra debugging for showdown
+        // Handle showdown state
         if (newGameState.phase === 'SHOWDOWN') {
-            console.log('SHOWDOWN detected!');
-            console.log('Winners:', newGameState.winners);
-            console.log('Winner count:', newGameState.winnerCount);
-            console.log('Players:', newGameState.players);
-            console.log('Any winners in players?', newGameState.players?.some(p => p.isWinner));
-            
-            // Check if any player has isWinner flag
-            if (newGameState.players) {
-                newGameState.players.forEach(player => {
-                    console.log(`Player ${player.name}: isWinner=${player.isWinner}, handRank=${player.handRank}`);
-                });
-            }
-            
             // Capture showdown state and start timer
             setShowdownState(newGameState);
             setShowdownStartTime(Date.now());
@@ -194,12 +172,10 @@ function GameRoomPage() {
             isShowingShowdownRef.current = true;
         } else if (isShowingShowdownRef.current && newGameState.phase === 'PRE_FLOP') {
             // If we receive a new hand state while showing showdown, delay the transition
-            console.log('New hand state received while showing showdown, delaying transition...');
             const elapsed = Date.now() - showdownStartTimeRef.current;
             const remainingTime = Math.max(0, 10000 - elapsed); // Show showdown for at least 10 seconds
             
             setTimeout(() => {
-                console.log('Showdown display time complete, switching to new hand');
                 setIsShowingShowdown(false);
                 setShowdownState(null);
                 setShowdownStartTime(null);
@@ -246,14 +222,11 @@ function GameRoomPage() {
             setLoading(true)
             setError("")
             
-            console.log('Fetching game state for player:', playerName);
             const url = `http://localhost:8080/api/game/${gameId}/state${playerName ? `?playerName=${encodeURIComponent(playerName)}` : ''}`;
-            console.log('Request URL:', url);
             const response = await fetch(url)
             
             if (response.ok) {
                 const gameData = await response.json()
-                console.log('Received game data:', gameData);
                 handleGameStateUpdate(gameData);
             } else if (response.status === 404) {
                 setError("Game not found")
@@ -288,8 +261,6 @@ function GameRoomPage() {
     }, [error])
 
     const handleAction = async (action, amount = 0) => {
-        console.log(`Player action: ${action}`, amount)
-        
         if (!currentPlayer) {
             setError("Player not found")
             return;
@@ -311,7 +282,7 @@ function GameRoomPage() {
             
             if (response.ok) {
                 // Game state will be updated via WebSocket, no need to manually refresh
-                console.log(`Action ${action} submitted successfully`);
+                setError(""); // Clear any previous errors
             } else {
                 const errorText = await response.text()
                 setError(`Action failed: ${errorText}`)

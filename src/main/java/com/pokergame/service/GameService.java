@@ -12,6 +12,8 @@ import com.pokergame.dto.PlayerDecision;
 import com.pokergame.dto.WebSocketMessage;
 import com.pokergame.websocket.RoomWebSocketHandler;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,31 +21,47 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * Service class that manages poker game logic, room management, and WebSocket
+ * communications.
+ * Handles game lifecycle from room creation to game completion, including
+ * player actions,
+ * betting rounds, and showdown resolution.
+ */
 @Service
 public class GameService {
 
+    private static final Logger logger = LoggerFactory.getLogger(GameService.class);
+
     @Autowired
     private HandEvaluatorService handEvaluator;
-    private final Map<String, Game> activeGames = new HashMap<>();
-    private final Map<String, Room> rooms = new ConcurrentHashMap<>();
-    private final Map<String, String> roomHosts = new ConcurrentHashMap<>();
+
     @Autowired
     private RoomWebSocketHandler webSocketHandler;
 
-    // Track betting round state for each game
+    // Game state storage
+    private final Map<String, Game> activeGames = new HashMap<>();
+    private final Map<String, Room> rooms = new ConcurrentHashMap<>();
+    private final Map<String, String> roomHosts = new ConcurrentHashMap<>();
+
+    // Betting round state tracking
     private final Map<String, Set<String>> playersWhoActedInInitialTurn = new HashMap<>();
 
     /**
-     * Create a room/lobby (NOT a game yet)
+     * Creates a new poker room with the specified configuration.
+     * 
+     * @param request The room creation request containing room name, host, and game
+     *                settings
+     * @return The unique room ID for the created room
+     * @throws IllegalArgumentException if room name is already taken
      */
     public String createRoom(CreateRoomRequest request) {
-        // Check if room name already exists
         if (isRoomNameTaken(request.getRoomName())) {
             throw new IllegalArgumentException(
                     "Room name '" + request.getRoomName() + "' is already taken. Please choose a different name.");
         }
 
-        String roomId = UUID.randomUUID().toString(); // Reuse the ID generator
+        String roomId = UUID.randomUUID().toString();
 
         Room room = new Room(
                 roomId,
@@ -168,8 +186,7 @@ public class GameService {
         webSocketHandler.broadcastToRoom(roomId,
                 new WebSocketMessage("GAME_STARTED", roomId, gameStartMessage));
 
-        // Start the first hand after a brief delay to allow players to navigate
-        System.out.println("Game created and broadcasted: " + roomId);
+        logger.info("Game created and started for room: {} with {} players", roomId, players.size());
 
         // Initialize the game properly
         startNewHand(roomId);
@@ -294,12 +311,12 @@ public class GameService {
         game.getPlayers().remove(playerToRemove);
         game.getActivePlayers().remove(playerToRemove);
 
-        System.out.println("Player " + playerName + " left game " + gameId);
-        System.out.println("Remaining players: " + game.getPlayers().size());
+        logger.info("Player {} left game {} | Remaining players: {}",
+                playerName, gameId, game.getPlayers().size());
 
         // Check if no players left in the game
         if (game.getPlayers().isEmpty()) {
-            System.out.println("All players left game " + gameId + ", destroying game and room");
+            logger.info("All players left game {}, destroying game and room", gameId);
 
             // Notify any remaining WebSocket connections that the room is closed
             webSocketHandler.broadcastToRoom(gameId,
@@ -310,80 +327,79 @@ public class GameService {
             Room room = rooms.remove(gameId);
             if (room != null) {
                 roomHosts.remove(gameId);
-                System.out.println("Room " + room.getRoomName() + " has been destroyed - all players left");
+                logger.info("Room {} has been destroyed - all players left", room.getRoomName());
             }
         } else {
-            // Game continues with remaining players
-            System.out.println("Game continues with " + game.getPlayers().size() + " players");
+            logger.info("Game {} continues with {} players", gameId, game.getPlayers().size());
 
             // If only one player remains, end the game immediately
             if (game.getPlayers().size() == 1) {
-                System.out.println("Only one player remaining, ending game");
+                logger.info("Only one player remaining in game {}, ending game", gameId);
                 handleGameEnd(gameId);
                 return;
             }
 
             // If the leaving player was the current player, advance to next player
             if (wasCurrentPlayer && !game.getActivePlayers().isEmpty()) {
-                // Need to reset the current player since the list changed
                 game.nextPlayer();
             }
 
-            // Broadcast updated game state to remaining players
             broadcastGameState(gameId);
         }
     }
 
+    /**
+     * Starts a new hand of poker for the specified game.
+     * Resets game state, deals cards, posts blinds, and broadcasts initial state.
+     * 
+     * @param gameId The unique identifier of the game
+     */
     public void startNewHand(String gameId) {
         Game game = getGame(gameId);
-        System.out.println("=== STARTING NEW HAND ===");
-        System.out.println("Game ID: " + gameId);
+        logger.info("Starting new hand for game: {}", gameId);
 
         if (game.isGameOver()) {
-            System.out.println("❌ Game is over, cannot start new hand");
+            logger.warn("Cannot start new hand - game {} is over", gameId);
             return;
         }
 
-        System.out.println("✅ Game is not over, proceeding with new hand");
-        System.out.println("Resetting game state for new hand...");
         game.resetForNewHand();
 
         if (game.isGameOver()) {
-            System.out.println("❌ Game became over after reset, stopping");
+            logger.warn("Game {} became over after reset", gameId);
             return;
         }
 
-        System.out.println("Dealing hole cards...");
         game.dealHoleCards();
-
-        System.out.println("Posting blinds...");
         game.postBlinds();
-
-        // Broadcast the initial game state to all players
-        System.out.println("Broadcasting new hand state...");
         broadcastGameState(gameId);
 
-        System.out.println("✅ New hand started successfully!");
-        System.out.println("  Game: " + gameId);
-        System.out.println("  Current player: " + game.getCurrentPlayer().getName());
-        System.out.println("  Phase: " + game.getCurrentPhase());
-        System.out.println("  Pot: " + game.getPot());
-        System.out.println("=== NEW HAND COMPLETE ===");
+        logger.info("New hand started successfully for game: {} | Current player: {} | Phase: {} | Pot: {}",
+                gameId, game.getCurrentPlayer().getName(), game.getCurrentPhase(), game.getPot());
     }
 
+    /**
+     * Processes a player action request and advances the game state accordingly.
+     * Validates the request, processes the decision, and handles game progression.
+     * 
+     * @param gameId        the unique identifier of the game
+     * @param actionRequest the action request containing player name, action type,
+     *                      and amount
+     * @throws SecurityException if the requesting player is not the current player
+     */
     public void processPlayerAction(String gameId, PlayerActionRequest actionRequest) {
         Game game = getGame(gameId);
         Player currentPlayer = game.getCurrentPlayer();
 
-        System.out.println("=== PROCESSING PLAYER ACTION ===");
-        System.out.println(
-                "Game: " + gameId + ", Player: " + currentPlayer.getName() + ", Action: " + actionRequest.action());
-        System.out.println("Phase: " + game.getCurrentPhase() + ", Current bet: " + game.getCurrentHighestBet());
+        logger.debug("Processing player action - Game: {}, Player: {}, Action: {}",
+                gameId, currentPlayer.getName(), actionRequest.action());
+        logger.debug("Game state - Phase: {}, Current bet: {}",
+                game.getCurrentPhase(), game.getCurrentHighestBet());
 
         // Verify that the requesting player is the current player
         if (!currentPlayer.getName().equals(actionRequest.playerName())) {
-            System.out.println("❌ Player name mismatch: expected " + currentPlayer.getName() + ", got "
-                    + actionRequest.playerName());
+            logger.warn("Player name mismatch: expected {}, got {}",
+                    currentPlayer.getName(), actionRequest.playerName());
             throw new SecurityException("It's not your turn. Current player is: " + currentPlayer.getName());
         }
 
@@ -392,15 +408,15 @@ public class GameService {
                 actionRequest.amount() != null ? actionRequest.amount() : 0,
                 currentPlayer.getPlayerId());
 
-        System.out.println("Processing decision: " + decision);
+        logger.debug("Processing decision: {}", decision);
 
         // Process the decision first - this is the critical operation that must succeed
         String conversionMessage = game.processPlayerDecision(currentPlayer, decision);
-        System.out.println("Decision processed successfully");
+        logger.debug("Decision processed successfully");
 
         // If there was a conversion, notify the player
         if (conversionMessage != null) {
-            System.out.println("Sending conversion message to player: " + conversionMessage);
+            logger.info("Sending conversion message to player {}: {}", currentPlayer.getName(), conversionMessage);
             sendPlayerNotification(gameId, currentPlayer.getName(), conversionMessage);
         }
 
@@ -421,39 +437,45 @@ public class GameService {
                     .allMatch(p -> actedPlayers.contains(p.getPlayerId()));
 
             if (everyoneHasActed && !game.isBettingRoundComplete()) {
-                System.out.println("✅ Everyone has had their initial turn, enabling Phase 2 logic");
+                logger.debug("Everyone has had their initial turn for game {}, enabling Phase 2 logic", gameId);
                 game.setEveryoneHasHadInitialTurn(true);
             }
 
             // Broadcast game state after player action
             broadcastGameState(gameId);
 
-            System.out.println("Checking if betting round is complete...");
+            logger.debug("Checking if betting round is complete for game {}...", gameId);
             if (game.isBettingRoundComplete()) {
-                System.out.println("✅ Betting round complete, advancing game");
+                logger.debug("Betting round complete for game {}, advancing game", gameId);
                 // Clear the initial turn tracking for next round
                 playersWhoActedInInitialTurn.remove(gameId);
                 advanceGame(gameId);
             } else {
-                System.out.println("❌ Betting round not complete, moving to next player");
+                logger.debug("Betting round not complete for game {}, moving to next player", gameId);
                 game.nextPlayer();
                 // Broadcast again after moving to next player
                 broadcastGameState(gameId);
             }
         } catch (Exception e) {
-            System.err.println("Error in post-processing (action was successful): " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Error in post-processing for game {} (action was successful): {}", gameId, e.getMessage(), e);
             // Re-broadcast to ensure clients have updated state
             try {
                 broadcastGameState(gameId);
             } catch (Exception broadcastError) {
-                System.err.println("Failed to broadcast after error: " + broadcastError.getMessage());
+                logger.error("Failed to broadcast after error for game {}: {}", gameId, broadcastError.getMessage());
             }
         }
 
-        System.out.println("=== PLAYER ACTION COMPLETE ===");
+        logger.debug("Player action processing complete for game {}", gameId);
     }
 
+    /**
+     * Sends a notification message to a specific player in the game.
+     * 
+     * @param gameId     the unique identifier of the game
+     * @param playerName the name of the player to notify
+     * @param message    the notification message to send
+     */
     private void sendPlayerNotification(String gameId, String playerName, String message) {
         Map<String, Object> notification = new HashMap<>();
         notification.put("type", "PLAYER_NOTIFICATION");
@@ -465,6 +487,13 @@ public class GameService {
                 new WebSocketMessage("PLAYER_NOTIFICATION", gameId, notification));
     }
 
+    /**
+     * Handles the end of a game when all players except one have been eliminated.
+     * Broadcasts the game end event to all participants and cleans up game
+     * resources.
+     * 
+     * @param gameId the unique identifier of the game
+     */
     private void handleGameEnd(String gameId) {
         Game game = getGame(gameId);
         if (game == null)
@@ -483,7 +512,8 @@ public class GameService {
                     .orElse(game.getPlayers().get(0)); // Fallback to first player
         }
 
-        System.out.println("🏆 GAME OVER! Winner: " + winner.getName() + " with " + winner.getChips() + " chips");
+        logger.info("Game {} completed - Winner: {} with {} chips",
+                gameId, winner.getName(), winner.getChips());
 
         // Broadcast game end message
         Map<String, Object> gameEndData = new HashMap<>();
@@ -500,7 +530,7 @@ public class GameService {
         new Thread(() -> {
             try {
                 Thread.sleep(10000); // 10 second delay to show winner
-                System.out.println("Destroying room after game end: " + gameId);
+                logger.info("Destroying room after game completion: {}", gameId);
 
                 // Notify players that room is being destroyed
                 webSocketHandler.broadcastToRoom(gameId,
@@ -511,49 +541,53 @@ public class GameService {
                 Room room = rooms.remove(gameId);
                 if (room != null) {
                     roomHosts.remove(gameId);
-                    System.out.println("Room " + room.getRoomName() + " has been destroyed after game completion");
+                    logger.info("Room {} has been destroyed after game completion", room.getRoomName());
                 }
 
             } catch (InterruptedException e) {
-                System.err.println("Interrupted while cleaning up game: " + e.getMessage());
+                logger.warn("Interrupted while cleaning up game {}: {}", gameId, e.getMessage());
                 Thread.currentThread().interrupt();
             }
         }).start();
     }
 
+    /**
+     * Advances the game to the next phase or conducts showdown if hand is over.
+     * Handles progression through betting rounds and manages game state
+     * transitions.
+     * 
+     * @param gameId The unique identifier of the game to advance
+     */
     private void advanceGame(String gameId) {
         Game game = getGame(gameId);
-        System.out.println("Advancing game " + gameId + " from phase: " + game.getCurrentPhase());
+        logger.info("Advancing game {} from phase: {}", gameId, game.getCurrentPhase());
 
         if (game.isHandOver()) {
-            System.out.println("Hand is over, conducting showdown...");
-            int potBeforeDistribution = game.getPot(); // Capture pot before showdown
+            logger.info("Hand is over for game {}, conducting showdown", gameId);
+            int potBeforeDistribution = game.getPot();
             List<Player> winners = game.conductShowdown();
-            System.out.println("Showdown complete. Winners: " + winners.stream().map(Player::getName).toList());
-            // Broadcast showdown results with winner information and actual winnings
+            logger.info("Showdown complete for game {} | Winners: {}",
+                    gameId, winners.stream().map(Player::getName).toList());
+
             int winningsPerPlayer = winners.isEmpty() ? 0 : potBeforeDistribution / winners.size();
             broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
-            // Add delay before starting new hand to allow frontend to display results
-            System.out.println("Waiting 10 seconds before starting new hand...");
+            // Delay before starting new hand to allow winner display
             new Thread(() -> {
                 try {
-                    Thread.sleep(10000); // 10 second delay
-                    System.out.println("Proceeding to cleanup and new hand...");
+                    Thread.sleep(10000);
                     game.cleanupAfterHand();
 
-                    // Check if game is over after cleanup
                     if (game.isGameOver()) {
-                        System.out.println("Game is over! Handling end of game...");
+                        logger.info("Game {} is over, handling end of game", gameId);
                         handleGameEnd(gameId);
                         return;
                     }
 
                     game.advancePositions();
-                    System.out.println("Starting new hand...");
                     startNewHand(gameId);
                 } catch (InterruptedException e) {
-                    System.err.println("Interrupted while waiting to start new hand: " + e.getMessage());
+                    logger.warn("Interrupted while waiting to start new hand for game {}: {}", gameId, e.getMessage());
                     Thread.currentThread().interrupt();
                 }
             }).start();
@@ -565,140 +599,129 @@ public class GameService {
                 .filter(p -> !p.getHasFolded() && !p.getIsAllIn())
                 .count();
 
-        System.out.println("Players able to act: " + playersAbleToAct + ", Betting round complete: "
-                + game.isBettingRoundComplete());
+        logger.debug("Game {} status | Players able to act: {} | Betting round complete: {}",
+                gameId, playersAbleToAct, game.isBettingRoundComplete());
 
         // Auto-advance if betting round is complete AND most players are all-in
         if (game.isBettingRoundComplete() && playersAbleToAct <= 1) {
-            System.out.println("All-in situation detected. Auto-advancing to showdown slowly.");
-            // Send auto-advancing notification to frontend
+            logger.info("All-in situation detected for game {}, auto-advancing to showdown", gameId);
             broadcastAutoAdvanceNotification(gameId);
             autoAdvanceToShowdown(gameId);
-            return; // Use the dedicated slow-advance method
+            return;
         }
 
         // Normal advancement logic
         switch (game.getCurrentPhase()) {
             case PRE_FLOP:
-                System.out.println("Moving to FLOP phase");
+                logger.info("Game {} advancing to FLOP phase", gameId);
                 game.dealFlop();
                 broadcastGameState(gameId);
                 break;
             case FLOP:
-                System.out.println("Moving to TURN phase");
+                logger.info("Game {} advancing to TURN phase", gameId);
                 game.dealTurn();
                 broadcastGameState(gameId);
                 break;
             case TURN:
-                System.out.println("Moving to RIVER phase");
+                logger.info("Game {} advancing to RIVER phase", gameId);
                 game.dealRiver();
                 broadcastGameState(gameId);
                 break;
             case RIVER:
-                System.out.println("RIVER betting complete, conducting showdown...");
-                int potBeforeDistribution = game.getPot(); // Capture pot before showdown
+                logger.info("RIVER betting complete for game {}, conducting showdown", gameId);
+                int potBeforeDistribution = game.getPot();
                 List<Player> winners = game.conductShowdown();
-                System.out.println("Showdown complete. Winners: " + winners.stream().map(Player::getName).toList());
-                // Broadcast showdown results with winner information and actual winnings
+                logger.info("Showdown complete for game {} | Winners: {}",
+                        gameId, winners.stream().map(Player::getName).toList());
+
                 int winningsPerPlayer = winners.isEmpty() ? 0 : potBeforeDistribution / winners.size();
                 broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
-                // Add delay before starting new hand to allow frontend to display results
-                System.out.println("Waiting 10 seconds before starting new hand...");
+                // Delay before starting new hand to allow winner display
                 new Thread(() -> {
                     try {
-                        Thread.sleep(10000); // 10 second delay
-                        System.out.println("Proceeding to cleanup and new hand...");
+                        Thread.sleep(10000);
                         game.cleanupAfterHand();
 
-                        // Check if game is over after cleanup
                         if (game.isGameOver()) {
-                            System.out.println("Game is over after river! Handling end of game...");
+                            logger.info("Game {} is over after river, handling end of game", gameId);
                             handleGameEnd(gameId);
                             return;
                         }
 
                         game.advancePositions();
-                        System.out.println("Starting new hand after river...");
                         startNewHand(gameId);
                     } catch (InterruptedException e) {
-                        System.err.println("Interrupted while waiting to start new hand: " + e.getMessage());
+                        logger.warn("Interrupted while waiting to start new hand for game {}: {}", gameId,
+                                e.getMessage());
                         Thread.currentThread().interrupt();
                     }
                 }).start();
                 break;
             case SHOWDOWN:
-                System.out.println("Already in showdown phase");
-                // Handle showdown phase
+                logger.warn("Game {} already in showdown phase", gameId);
                 break;
         }
     }
 
+    /**
+     * Automatically advances the game to showdown when all active players are
+     * all-in.
+     * Deals remaining community cards with appropriate timing and conducts
+     * showdown.
+     * 
+     * @param gameId The unique identifier of the game to advance
+     */
     private void autoAdvanceToShowdown(String gameId) {
         Game game = getGame(gameId);
         if (game == null)
             return;
 
-        System.out.println("Starting auto-advance to showdown for game: " + gameId);
-
-        // Broadcast initial auto-advancing state
+        logger.info("Starting auto-advance to showdown for game: {}", gameId);
         broadcastGameStateWithAutoAdvance(gameId, true, "All players are all-in. Auto-advancing to showdown...");
 
         new Thread(() -> {
             try {
-                // Deal remaining cards with delays
+                // Deal remaining cards with delays for dramatic effect
                 if (game.getCurrentPhase() == GamePhase.PRE_FLOP) {
                     Thread.sleep(3000);
-                    System.out.println("Auto-advancing: Dealing FLOP");
                     game.dealFlop();
                     broadcastGameStateWithAutoAdvance(gameId, true, "Dealing the flop...");
                 }
                 if (game.getCurrentPhase() == GamePhase.FLOP) {
                     Thread.sleep(3000);
-                    System.out.println("Auto-advancing: Dealing TURN");
                     game.dealTurn();
                     broadcastGameStateWithAutoAdvance(gameId, true, "Dealing the turn...");
                 }
                 if (game.getCurrentPhase() == GamePhase.TURN) {
                     Thread.sleep(3000);
-                    System.out.println("Auto-advancing: Dealing RIVER");
                     game.dealRiver();
                     broadcastGameStateWithAutoAdvance(gameId, true, "Dealing the river...");
                 }
 
-                // All cards are dealt, proceed to showdown
+                // Conduct showdown
                 Thread.sleep(2000);
-                System.out.println("Auto-advancing: Conducting SHOWDOWN");
                 broadcastGameStateWithAutoAdvance(gameId, true, "Revealing hands...");
-                Thread.sleep(2000); // Give more time for frontend to process
+                Thread.sleep(2000);
 
-                System.out.println("Auto-advancing: Executing showdown logic");
                 int potBeforeDistribution = game.getPot();
                 List<Player> winners = game.conductShowdown();
-                System.out.println("Auto-advancing: Showdown complete, winners: "
-                        + winners.stream().map(Player::getName).toList());
+                logger.info("Auto-advance showdown complete for game: {} | Winners: {}",
+                        gameId, winners.stream().map(Player::getName).toList());
 
                 int winningsPerPlayer = winners.isEmpty() ? 0 : potBeforeDistribution / winners.size();
-                System.out.println("Auto-advancing: Broadcasting showdown results");
                 broadcastShowdownResults(gameId, winners, winningsPerPlayer);
 
-                System.out.println("Auto-advancing: Showdown results broadcast complete");
-
-                // Turn off auto-advance state now that showdown is complete
-                System.out.println("Auto-advancing: Turning off auto-advance state");
+                // Turn off auto-advance state
                 broadcastAutoAdvanceComplete(gameId);
 
-                // Wait longer to let winner display show properly before starting the next hand
-                // No need to send additional state updates that would override the winner
-                // display
-                System.out.println("Auto-advancing: Waiting for winner display (10 seconds total)");
+                // Wait to let winner display show properly before starting the next hand
                 Thread.sleep(10000);
-                System.out.println("Auto-advancing: Cleaning up and starting new hand");
                 game.cleanupAfterHand();
 
                 // Check if game is over after cleanup
                 if (game.isGameOver()) {
-                    System.out.println("Auto-advancing: Game is over! Handling end of game...");
+                    logger.info("Game {} is over after auto-advance, handling end of game", gameId);
                     handleGameEnd(gameId);
                     return;
                 }
@@ -707,7 +730,7 @@ public class GameService {
                 startNewHand(gameId);
 
             } catch (InterruptedException e) {
-                System.err.println("Auto-advance thread interrupted: " + e.getMessage());
+                logger.warn("Auto-advance thread interrupted for game {}: {}", gameId, e.getMessage());
                 Thread.currentThread().interrupt();
             }
         }).start();
@@ -890,7 +913,7 @@ public class GameService {
         webSocketHandler.sendToPlayer(gameId, playerName,
                 new WebSocketMessage("GAME_STATE_UPDATE", gameId, gameState));
 
-        System.out.println("Broadcasted game state for game: " + gameId + " to player: " + playerName);
+        logger.debug("Broadcasted game state for game {} to player {}", gameId, playerName);
     }
 
     /**
@@ -951,8 +974,8 @@ public class GameService {
                 List<Card> bestHand = player.getBestHand();
                 playerData.put("cards", bestHand != null ? bestHand : new ArrayList<>());
                 playerData.put("bestHand", bestHand != null ? bestHand : new ArrayList<>());
-                System.out.println("SHOWDOWN RESULTS: Sending best hand for " + player.getName() + ": " +
-                        (bestHand != null ? bestHand.size() + " cards - " + bestHand : "null"));
+                logger.debug("Showdown results: Sending best hand for {} with {} cards",
+                        player.getName(), bestHand != null ? bestHand.size() : 0);
             } else {
                 playerData.put("cards", new ArrayList<>());
             }
@@ -965,10 +988,10 @@ public class GameService {
         webSocketHandler.broadcastToRoom(gameId,
                 new WebSocketMessage("SHOWDOWN_RESULTS", gameId, gameState));
 
-        System.out.println("Broadcasted showdown results for game: " + gameId + ", winners: " + winnerNames);
-        System.out.println("Showdown gameState contains winners: " + gameState.get("winners"));
-        System.out.println("Showdown gameState contains winnerCount: " + gameState.get("winnerCount"));
-        System.out.println("Actual winnings per player: " + winningsPerPlayer);
+        logger.info("Broadcasted showdown results for game {} with {} winner(s): {}",
+                gameId, winnerNames.size(), winnerNames);
+        logger.debug("Showdown game state - winners: {}, winnerCount: {}, winnings per player: {}",
+                gameState.get("winners"), gameState.get("winnerCount"), winningsPerPlayer);
     }
 
 }

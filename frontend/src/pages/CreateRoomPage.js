@@ -3,6 +3,18 @@
 import { useState } from "react"
 import { useNavigate, Link } from "react-router-dom"
 
+/**
+ * CreateRoomPage - Interface for creating new poker game rooms
+ * 
+ * Features:
+ * - Room configuration (name, player limits, blinds, buy-in)
+ * - Optional password protection
+ * - Form validation and error handling
+ * - Automatic navigation to lobby after room creation
+ * 
+ * @component
+ * @returns {JSX.Element} The create room page component
+ */
 function CreateRoomPage() {
     const navigate = useNavigate()
     const [formData, setFormData] = useState({
@@ -31,9 +43,6 @@ function CreateRoomPage() {
     setError("")
 
     try {
-        console.log('Creating room with data:', formData);
-        console.log('Player name being sent:', formData.playerName);
-        
         // Create ROOM (not game)
         const response = await fetch('http://localhost:8080/api/game/create-room', {
             method: 'POST',
@@ -43,8 +52,6 @@ function CreateRoomPage() {
             body: JSON.stringify(formData)
         });
 
-        console.log('Create room response status:', response.status);
-
         if (!response.ok) {
             const errorData = await response.text();
             console.error('Create room error:', errorData);
@@ -52,14 +59,7 @@ function CreateRoomPage() {
         }
 
         const result = await response.json();
-        console.log('Create room result:', result);
         const roomId = result.roomId;
-
-        console.log('Navigating to lobby with:', {
-            roomId,
-            playerName: formData.playerName,
-            formData
-        });
 
         // Navigate to lobby with room data
         navigate(`/lobby/${roomId}`, {

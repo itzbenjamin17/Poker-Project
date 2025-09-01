@@ -2,10 +2,19 @@ package com.pokergame.model;
 
 import com.pokergame.dto.PlayerDecision;
 import com.pokergame.service.HandEvaluatorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
+/**
+ * Represents a poker game instance with players, betting rounds, and game state
+ * management.
+ * Handles game progression, betting logic, and hand evaluation.
+ */
 public class Game {
+
+    private static final Logger logger = LoggerFactory.getLogger(Game.class);
 
     private final String gameId;
     private final List<Player> players;
@@ -109,11 +118,12 @@ public class Game {
 
             if (decision.action() == PlayerAction.ALL_IN && player.getChips() <= callAmount) {
                 // Player doesn't have enough chips to call, so legitimate all-in
-                System.out.println("Player going all-in with insufficient chips to call - allowing all-in.");
+                logger.debug("Player {} going all-in with insufficient chips to call - allowing all-in",
+                        player.getName());
             } else {
                 // Player has enough chips to call or is trying to raise - convert to call
-                System.out.println("Player attempted to " + decision.action()
-                        + " but there are all-in players. Converting to call.");
+                logger.info("Player {} attempted {} but there are all-in players. Converting to call",
+                        player.getName(), decision.action());
                 actualDecision = new PlayerDecision(PlayerAction.CALL, 0, decision.playerId());
                 conversionMessage = "Your " + decision.action().toString().toLowerCase()
                         + " was converted to a call because there are all-in players.";
@@ -165,7 +175,7 @@ public class Game {
     public boolean isBettingRoundComplete() {
         // Phase 1: Everyone must have their initial turn first (like your VB.NET logic)
         if (!everyoneHasHadInitialTurn) {
-            System.out.println("Betting round not complete: Not everyone has had initial turn");
+            logger.debug("Betting round not complete: Not everyone has had initial turn");
             return false;
         }
 
@@ -178,27 +188,27 @@ public class Game {
                         !p.getHasFolded() &&
                         !p.getIsAllIn());
 
-        System.out.println("Checking if betting round complete:");
-        System.out.println("  Current highest bet: " + currentHighestBet);
-        System.out.println("  Everyone has had initial turn: " + everyoneHasHadInitialTurn);
-        System.out.println("  Active players status:");
-        activePlayers.forEach(p -> {
-            System.out.println("    " + p.getName() + ": bet=" + p.getCurrentBet() +
-                    ", folded=" + p.getHasFolded() +
-                    ", allIn=" + p.getIsAllIn() +
-                    ", needsToAct=" + (p.getCurrentBet() < currentHighestBet && !p.getHasFolded() && !p.getIsAllIn()));
-        });
+        logger.debug("Checking if betting round complete - Current highest bet: {}, Everyone has had initial turn: {}",
+                currentHighestBet, everyoneHasHadInitialTurn);
+
+        if (logger.isDebugEnabled()) {
+            activePlayers.forEach(p -> {
+                logger.debug("Player {}: bet={}, folded={}, all-in={}, needsToAct={}",
+                        p.getName(), p.getCurrentBet(), p.getHasFolded(), p.getIsAllIn(),
+                        (p.getCurrentBet() < currentHighestBet && !p.getHasFolded() && !p.getIsAllIn()));
+            });
+        }
 
         boolean isComplete = !hasPlayerWhoNeedsToAct;
-        System.out.println("  Result: " + (isComplete ? "Complete" : "Not complete") +
-                " (hasPlayerWhoNeedsToAct=" + hasPlayerWhoNeedsToAct + ")");
+        logger.debug("Betting round result: {} (hasPlayerWhoNeedsToAct={})",
+                (isComplete ? "Complete" : "Not complete"), hasPlayerWhoNeedsToAct);
 
         return isComplete;
     }
 
     public void setEveryoneHasHadInitialTurn(boolean value) {
         this.everyoneHasHadInitialTurn = value;
-        System.out.println("Set everyoneHasHadInitialTurn = " + value);
+        logger.debug("Set everyoneHasHadInitialTurn = {}", value);
     }
 
     public void dealFlop() {
@@ -220,40 +230,43 @@ public class Game {
     }
 
     public List<Player> conductShowdown() {
-        System.out.println("=== CONDUCTING SHOWDOWN ===");
+        logger.info("Conducting showdown for game {}", gameId);
         currentPhase = GamePhase.SHOWDOWN;
 
         List<Player> showdownPlayers = activePlayers.stream()
                 .filter(p -> !p.getHasFolded())
                 .toList();
 
-        System.out.println("Showdown players: " + showdownPlayers.stream().map(Player::getName).toList());
-        System.out.println("Current pot: " + pot);
+        logger.info("Showdown players: {}, Current pot: {}",
+                showdownPlayers.stream().map(Player::getName).toList(), pot);
 
         if (showdownPlayers.size() == 1) {
-            System.out.println("Only one player remaining, auto-win");
+            logger.info("Only one player remaining, auto-win for {}", showdownPlayers.get(0).getName());
             distributePot(showdownPlayers);
             return showdownPlayers;
         }
 
-        System.out.println("Evaluating hands...");
+        logger.debug("Evaluating hands for {} players", showdownPlayers.size());
         evaluateHands(showdownPlayers);
 
-        System.out.println("Hand rankings:");
-        showdownPlayers.forEach(
-                p -> System.out.println("  " + p.getName() + ": " + p.getHandRank() + " with " + p.getBestHand()));
+        if (logger.isDebugEnabled()) {
+            showdownPlayers
+                    .forEach(p -> logger.debug("Player {}: {} with {}", p.getName(), p.getHandRank(), p.getBestHand()));
+        }
 
-        System.out.println("Determining winners...");
+        logger.debug("Determining winners from {} players", showdownPlayers.size());
         List<Player> winners = determineWinners(showdownPlayers);
 
-        System.out.println("Winners: " + winners.stream().map(Player::getName).toList());
-        System.out.println("Distributing pot of " + pot + " to " + winners.size() + " winner(s)");
+        logger.info("Winners: {}", winners.stream().map(Player::getName).toList());
+        logger.info("Distributing pot of {} to {} winner(s)", pot, winners.size());
         distributePot(winners);
 
-        System.out.println("Pot after distribution: " + pot);
-        winners.forEach(p -> System.out.println("  " + p.getName() + " now has " + p.getChips() + " chips"));
+        logger.debug("Pot after distribution: {}", pot);
+        if (logger.isDebugEnabled()) {
+            winners.forEach(p -> logger.debug("Player {} now has {} chips", p.getName(), p.getChips()));
+        }
 
-        System.out.println("=== SHOWDOWN COMPLETE ===");
+        logger.info("Showdown complete");
         return winners;
     }
 
@@ -295,28 +308,27 @@ public class Game {
     }
 
     private void distributePot(List<Player> winners) {
-        System.out.println("=== DISTRIBUTING POT ===");
+        logger.info("Distributing pot for game {}", gameId);
         if (winners.isEmpty()) {
-            System.out.println("❌ No winners to distribute pot to!");
+            logger.warn("No winners to distribute pot to!");
             return;
         }
 
-        System.out.println("Pot to distribute: " + pot);
-        System.out.println("Number of winners: " + winners.size());
+        logger.info("Pot to distribute: {}, Number of winners: {}", pot, winners.size());
 
         int potShare = pot / winners.size();
-        System.out.println("Each winner gets: " + potShare + " chips");
+        logger.info("Each winner gets: {} chips", potShare);
 
         for (Player winner : winners) {
             int chipsBefore = winner.getChips();
             winner.addChips(potShare);
-            System.out.println("  " + winner.getName() + ": " + chipsBefore + " -> " + winner.getChips() + " chips");
+            logger.debug("Player {}: {} -> {} chips", winner.getName(), chipsBefore, winner.getChips());
         }
 
         pot = pot % winners.size(); // Any remainder stays for the next hand
 
-        System.out.println("Pot remainder for next hand: " + pot);
-        System.out.println("=== POT DISTRIBUTION COMPLETE ===");
+        logger.debug("Pot remainder for next hand: {}", pot);
+        logger.info("Pot distribution complete");
     }
 
     public void advancePositions() {
@@ -327,14 +339,16 @@ public class Game {
     }
 
     public void cleanupAfterHand() {
-        System.out.println("Cleaning up after hand...");
-        System.out.println("Players before cleanup:");
-        players.forEach(
-                p -> System.out.println("  " + p.getName() + ": " + p.getChips() + " chips, isOut: " + p.getIsOut()));
+        logger.debug("Cleaning up after hand for game {}", gameId);
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("Players before cleanup:");
+            players.forEach(p -> logger.debug("  {}: {} chips, isOut: {}", p.getName(), p.getChips(), p.getIsOut()));
+        }
 
         players.forEach(p -> {
             if (p.getChips() == 0) {
-                System.out.println("Setting " + p.getName() + " as out (0 chips)");
+                logger.info("Setting {} as out (0 chips)", p.getName());
                 p.setIsOut();
             }
         });
@@ -343,14 +357,14 @@ public class Game {
         activePlayers.removeIf(Player::getIsOut);
         int sizeAfter = activePlayers.size();
 
-        System.out.println("Active players: " + sizeBefore + " -> " + sizeAfter);
-        System.out.println("Active players after cleanup: " + activePlayers.stream().map(Player::getName).toList());
+        logger.info("Active players: {} -> {}", sizeBefore, sizeAfter);
+        logger.debug("Active players after cleanup: {}", activePlayers.stream().map(Player::getName).toList());
 
         if (activePlayers.size() <= 1) {
-            System.out.println("Game over - only " + activePlayers.size() + " active players remaining");
+            logger.info("Game over - only {} active players remaining", activePlayers.size());
             gameOver = true;
         } else {
-            System.out.println("Game continues with " + activePlayers.size() + " active players");
+            logger.debug("Game continues with {} active players", activePlayers.size());
         }
     }
 

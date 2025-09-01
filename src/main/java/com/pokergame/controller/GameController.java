@@ -4,16 +4,24 @@ import com.pokergame.dto.CreateRoomRequest;
 import com.pokergame.dto.JoinRoomRequest;
 import com.pokergame.dto.PlayerActionRequest;
 import com.pokergame.service.GameService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 
+/**
+ * REST controller for handling poker game HTTP requests.
+ * Provides endpoints for room management, game operations, and player actions.
+ */
 @RestController
 @RequestMapping("/api/game")
 @CrossOrigin(origins = "http://localhost:3000")
 public class GameController {
+
+    private static final Logger logger = LoggerFactory.getLogger(GameController.class);
 
     @Autowired
     private GameService gameService;
@@ -112,7 +120,12 @@ public class GameController {
     }
 
     /**
-     * START ACTUAL GAME FROM ROOM
+     * Starts a poker game from an existing room.
+     * Only the room host can initiate the game.
+     * 
+     * @param roomId  the ID of the room to start the game from
+     * @param request contains the player name requesting to start the game
+     * @return ResponseEntity with game information or error message
      */
     @PostMapping("/room/{roomId}/start-game")
     public ResponseEntity<?> startGameFromRoom(@PathVariable String roomId, @RequestBody Map<String, String> request) {
@@ -121,20 +134,21 @@ public class GameController {
 
             // Verify player is the host
             if (!gameService.isRoomHost(roomId, playerName)) {
-                System.out.println("Not the host");
+                logger.warn("Non-host player {} attempted to start game for room {}", playerName, roomId);
                 return ResponseEntity.status(403).body("Only the room host can start the game");
             }
-            System.out.println("Host verified");
+
+            logger.info("Host {} starting game for room {}", playerName, roomId);
             String gameId = gameService.createGameFromRoom(roomId);
-            System.out.println("Game ID: " + gameId);
+            logger.info("Game {} created from room {}", gameId, roomId);
 
             Map<String, Object> response = Map.of(
                     "gameId", gameId,
                     "message", "Game started successfully");
 
-            System.out.println("Response: " + response);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
+            logger.error("Error starting game from room {}: {}", roomId, e.getMessage());
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
@@ -237,7 +251,12 @@ public class GameController {
     }
 
     /**
-     * GET GAME STATE (for GameRoomPage.js)
+     * Retrieves the current game state for a specific player.
+     * Returns player-specific information with appropriate card visibility.
+     * 
+     * @param gameId     the ID of the game
+     * @param playerName the name of the requesting player (optional)
+     * @return ResponseEntity with game state or error message
      */
     @GetMapping("/{gameId}/state")
     public ResponseEntity<?> getGameState(
@@ -249,7 +268,7 @@ public class GameController {
                 return ResponseEntity.notFound().build();
             }
 
-            System.out.println("Getting game state for game: " + gameId + ", requesting player: " + playerName);
+            logger.debug("Getting game state for game {}, requesting player: {}", gameId, playerName);
 
             // Create game state response for frontend
             Map<String, Object> gameState = new HashMap<>();
@@ -283,12 +302,12 @@ public class GameController {
                 // (for debugging)
                 if (playerName == null || playerName.trim().isEmpty() || player.getName().equals(playerName)) {
                     playerData.put("cards", player.getHoleCards());
-                    System.out.println("Sending cards for player: " + player.getName() + ", cards: "
-                            + player.getHoleCards().size());
+                    logger.debug("Sending cards for player: {} with {} cards",
+                            player.getName(), player.getHoleCards().size());
                 } else {
                     // Send empty cards for other players to maintain structure
                     playerData.put("cards", new ArrayList<>());
-                    System.out.println("Hiding cards for player: " + player.getName());
+                    logger.debug("Hiding cards for player: {}", player.getName());
                 }
                 playersList.add(playerData);
             }

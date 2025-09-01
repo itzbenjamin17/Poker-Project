@@ -4,6 +4,18 @@ import { useState, useEffect, useCallback } from "react"
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom"
 import { useRoomWebSocket } from "../hooks/useRoomWebSocket"
 
+/**
+ * LobbyPage - Displays the waiting room interface before a poker game starts
+ * 
+ * Features:
+ * - Real-time player list updates via WebSocket
+ * - Host controls for starting the game
+ * - Player management and room status display
+ * - Automatic navigation when game starts
+ * 
+ * @component
+ * @returns {JSX.Element} The lobby page component
+ */
 function LobbyPage() {
     const navigate = useNavigate()
     const { id: roomId } = useParams()
@@ -59,7 +71,6 @@ function LobbyPage() {
         }, [navigate]);
 
     const handleGameStarted = useCallback((gameData) => {
-        console.log('Game started via WebSocket:', gameData);
         // Navigate all players to the game room when game starts
         navigate(`/game/${roomId}`, { 
             state: { 
@@ -74,28 +85,19 @@ function LobbyPage() {
     // Fetch initial room data when component first loads (for direct navigation/refresh)
     const fetchInitialRoomData = useCallback(async () => {
         try {
-            console.log('Fetching initial room info for roomId:', roomId);
-            console.log('Current playerName:', playerName);
-            
             const response = await fetch(`http://localhost:8080/api/game/room/${roomId}`);
-            
-            console.log('Response status:', response.status);
             
             if (response.ok) {
                 const roomData = await response.json();
-                console.log('Initial room data received:', roomData);
                 
                 setPlayers(roomData.players || []);
                 setRoomInfo(roomData);
                 setError(""); // Clear any previous errors
             } else {
-                console.error('Failed to fetch initial room info:', response.status, response.statusText);
                 const errorText = await response.text();
-                console.error('Error response:', errorText);
                 
                 if (response.status === 404) {
                     // Room was destroyed (likely host left) - redirect to home
-                    console.log('Room not found - redirecting to home');
                     navigate("/", { 
                         state: { 
                             message: "The room has been closed by the host." 
@@ -109,7 +111,7 @@ function LobbyPage() {
             console.error('Error fetching initial room info:', error);
             setError('Failed to connect to server');
         }
-    }, [roomId, playerName, navigate]);
+    }, [roomId, navigate]);
 
     useEffect(() => {
         // Fetch initial room info when component mounts (for page refresh/direct navigation)
@@ -138,11 +140,9 @@ function LobbyPage() {
                     playerName: playerName,
                 })
             });
-            console.log('Response status:', response.status);
-            console.log('Response data:', await response.json());
+
             if (!response.ok) {
                 const errorData = await response.text();
-                console.error('Failed to start game:', errorData);
                 throw new Error(errorData || 'Failed to start game');
             }
 
@@ -188,9 +188,6 @@ function LobbyPage() {
         players.find(p => p.name === playerName)?.isHost || false : 
         false;
     const canStartGame = isHost && players.length >= 2
-    console.log({ isHost, playerName, hostName: roomInfo?.hostName, players });
-    console.log({ canStartGame, loading, playerCount: players.length });
-
 
     return (
         <div className="lobby-page">

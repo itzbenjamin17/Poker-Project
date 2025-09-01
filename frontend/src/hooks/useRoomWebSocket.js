@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 
+/**
+ * Custom hook for managing WebSocket connections to poker game rooms.
+ * Handles room updates, player joining/leaving events, and game start notifications.
+ * 
+ * @param {string} roomId - The unique identifier for the room
+ * @param {string} playerName - The name of the current player
+ * @param {function} onRoomUpdate - Callback for room state updates
+ * @param {function} onGameStarted - Callback when game starts
+ * @returns {object} Connection status and utilities
+ */
 export const useRoomWebSocket = (roomId, playerName, onRoomUpdate, onGameStarted) => {
     const [connected, setConnected] = useState(false);
     const wsRef = useRef(null);
@@ -15,20 +25,22 @@ export const useRoomWebSocket = (roomId, playerName, onRoomUpdate, onGameStarted
                     onRoomUpdate(message.data);
                     break;
                 case 'JOINED_ROOM':
-                    // Confirmation that we successfully joined - could update connection status
-                    console.log('Successfully joined room:', message.roomId);
+                    // Confirmation that we successfully joined the room
+                    setConnected(true);
                     break;
                 case 'ROOM_CLOSED':
                     onRoomUpdate(null); // Signal room was closed
                     break;
                 case 'GAME_STARTED':
-                    console.log('Game started! Redirecting to game...', message.data);
                     if (onGameStarted) {
                         onGameStarted(message.data);
                     }
                     break;
                 default: 
-                    console.warn('Unknown WebSocket message type:', message.type);
+                    // Unknown message type - could be logged in development
+                    if (process.env.NODE_ENV === 'development') {
+                        console.warn('Unknown WebSocket message type:', message.type);
+                    }
             }
         };
 
@@ -37,7 +49,6 @@ export const useRoomWebSocket = (roomId, playerName, onRoomUpdate, onGameStarted
         wsRef.current = ws;
 
         ws.onopen = () => {
-            console.log('WebSocket connected to room:', roomId);
             setConnected(true);
             // Join room on connection
             ws.send(JSON.stringify({
@@ -50,7 +61,6 @@ export const useRoomWebSocket = (roomId, playerName, onRoomUpdate, onGameStarted
         ws.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                console.log('WebSocket message received:', message);
                 handleWebSocketMessage(message);
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -58,7 +68,6 @@ export const useRoomWebSocket = (roomId, playerName, onRoomUpdate, onGameStarted
         };
 
         ws.onclose = (event) => {
-            console.log('WebSocket disconnected:', event.code, event.reason);
             setConnected(false);
         };
 

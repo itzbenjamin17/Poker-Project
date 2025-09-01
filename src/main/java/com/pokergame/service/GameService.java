@@ -779,6 +779,13 @@ public class GameService {
         gameState.put("isAutoAdvancing", isAutoAdvancing);
         gameState.put("autoAdvanceMessage", message);
 
+        // Add room information
+        Room room = rooms.get(gameId);
+        if (room != null) {
+            gameState.put("maxPlayers", room.getMaxPlayers());
+            gameState.put("roomName", room.getRoomName());
+        }
+
         // Add current player information
         Player currentPlayer = game.getCurrentPlayer();
         if (currentPlayer != null) {
@@ -863,6 +870,13 @@ public class GameService {
         gameState.put("currentBet", game.getCurrentHighestBet());
         gameState.put("communityCards", game.getCommunityCards());
 
+        // Add room information
+        Room room = rooms.get(gameId);
+        if (room != null) {
+            gameState.put("maxPlayers", room.getMaxPlayers());
+            gameState.put("roomName", room.getRoomName());
+        }
+
         // Add current player information
         Player currentPlayer = game.getCurrentPlayer();
         if (currentPlayer != null) {
@@ -932,6 +946,13 @@ public class GameService {
         gameState.put("phase", game.getCurrentPhase().toString());
         gameState.put("currentBet", game.getCurrentHighestBet());
         gameState.put("communityCards", game.getCommunityCards());
+
+        // Add room information
+        Room room = rooms.get(gameId);
+        if (room != null) {
+            gameState.put("maxPlayers", room.getMaxPlayers());
+            gameState.put("roomName", room.getRoomName());
+        }
 
         // Add winner information with actual winnings
         List<String> winnerNames = winners.stream().map(Player::getName).toList();
